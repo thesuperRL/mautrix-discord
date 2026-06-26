@@ -29,6 +29,7 @@ import (
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
+	"go.mau.fi/mautrix-discord/pkg/bridgeidentity"
 	"go.mau.fi/mautrix-discord/config"
 	"go.mau.fi/mautrix-discord/database"
 )
@@ -113,6 +114,7 @@ func (br *DiscordBridge) Start() {
 	}
 	br.DMA = newDirectMediaAPI(br)
 	br.WaitWebsocketConnected()
+	go bridgeidentity.Get()
 	go br.startUsers()
 }
 
@@ -125,6 +127,19 @@ func (br *DiscordBridge) Stop() {
 		br.Log.Debugln("Disconnecting", user.MXID)
 		user.Session.Close()
 	}
+}
+
+// getLoggedInUserForPortal returns any bridge user with an active Discord session.
+// Used when relay/webhook sends need to create a thread on Discord.
+func (br *DiscordBridge) getLoggedInUserForPortal() *User {
+	br.usersLock.Lock()
+	defer br.usersLock.Unlock()
+	for _, user := range br.usersByMXID {
+		if user.Session != nil && user.IsLoggedIn() {
+			return user
+		}
+	}
+	return nil
 }
 
 func (br *DiscordBridge) GetIPortal(mxid id.RoomID) bridge.Portal {
@@ -158,6 +173,15 @@ func (br *DiscordBridge) GetIGhost(mxid id.UserID) bridge.Ghost {
 
 func (br *DiscordBridge) CreatePrivatePortal(id id.RoomID, user bridge.User, ghost bridge.Ghost) {
 	//TODO implement
+}
+
+// GetLoggedInUserForPortal returns any logged-in Discord user for cross-bridge Matrix reactions.
+func (br *DiscordBridge) GetLoggedInUserForPortal(roomID id.RoomID) bridge.User {
+	portal := br.GetPortalByMXID(roomID)
+	if portal == nil {
+		return nil
+	}
+	return portal.reactionSessionUser(nil)
 }
 
 func main() {

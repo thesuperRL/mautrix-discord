@@ -619,8 +619,9 @@ func (portal *Portal) markMessageHandled(discordID string, authorID string, time
 
 func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Message, thread *Thread) {
 	switch msg.Type {
-	case discordgo.MessageTypeChannelNameChange, discordgo.MessageTypeChannelIconChange, discordgo.MessageTypeChannelPinnedMessage:
-		// These are handled via channel updates
+	case discordgo.MessageTypeChannelNameChange, discordgo.MessageTypeChannelIconChange, discordgo.MessageTypeChannelPinnedMessage,
+		discordgo.MessageTypeThreadCreated, discordgo.MessageTypeThreadStarterMessage:
+		// Channel updates and thread creation system messages must not reach Matrix/Slack.
 		return
 	}
 
@@ -637,6 +638,10 @@ func (portal *Portal) handleDiscordMessageCreate(user *User, msg *discordgo.Mess
 	existing := portal.bridge.DB.Message.GetByDiscordID(portal.Key, msg.ID)
 	if existing != nil {
 		log.Debug().Msg("Dropping duplicate message")
+		return
+	}
+	if portal.shouldSkipReactionMirrorMessage(msg) {
+		log.Debug().Msg("Skipping reaction mirror summary message")
 		return
 	}
 
@@ -1540,7 +1545,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 	}
 
 	channelID := portal.Key.ChannelID
-	sess := sender.Session
+	outboundSender, sess := portal.discordSessionForMatrixSender(sender, evt.Sender)
 	if sess == nil && portal.RelayWebhookID == "" {
 		go portal.sendMessageMetrics(evt, errUserNotLoggedIn, "Ignoring")
 		return
@@ -1552,7 +1557,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 		edits := portal.bridge.DB.Message.GetByMXID(portal.Key, editMXID)
 		if edits != nil {
 			newContentRaw, _ := evt.Content.Raw["m.new_content"].(map[string]any)
-			discordContent, allowedMentions := portal.parseMatrixHTML(content.NewContent, parseAllowedLinkPreviews(newContentRaw))
+			discordContent, allowedMentions := portal.parseMatrixHTML(content.NewContent, parseAllowedLinkPreviews(newContentRaw), "")
 			var err error
 			var msg *discordgo.Message
 			if !isWebhookSend {
@@ -1578,13 +1583,16 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 			threadID = existingThread.ID
 			existingThread.initialBackfillAttempted = true
 		} else {
+			threadSender := outboundSender
 			if isWebhookSend {
-				// TODO start thread with bot?
-				go portal.sendMessageMetrics(evt, errCantStartThread, "Dropping")
-				return
+				threadSender = portal.bridge.getLoggedInUserForPortal()
+				if threadSender == nil {
+					go portal.sendMessageMetrics(evt, errCantStartThread, "Dropping")
+					return
+				}
 			}
 			var err error
-			threadID, err = portal.startThreadFromMatrix(sender, threadRoot)
+			threadID, err = portal.startThreadFromMatrix(threadSender, threadRoot)
 			if err != nil {
 				portal.log.Warn().Err(err).
 					Str("thread_root_mxid", threadRoot.String()).
@@ -1631,7 +1639,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 	}
 	switch content.MsgType {
 	case event.MsgText, event.MsgEmote, event.MsgNotice:
-		sendReq.Content, sendReq.AllowedMentions = portal.parseMatrixHTML(content, parseAllowedLinkPreviews(evt.Content.Raw))
+		sendReq.Content, sendReq.AllowedMentions = portal.parseMatrixHTML(content, parseAllowedLinkPreviews(evt.Content.Raw), replyToUser)
 		if content.MsgType == event.MsgEmote {
 			sendReq.Content = fmt.Sprintf("_%s_", sendReq.Content)
 		}
@@ -1644,7 +1652,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 		filename := content.Body
 		if content.FileName != "" && content.FileName != content.Body {
 			filename = content.FileName
-			sendReq.Content, sendReq.AllowedMentions = portal.parseMatrixHTML(content, parseAllowedLinkPreviews(evt.Content.Raw))
+			sendReq.Content, sendReq.AllowedMentions = portal.parseMatrixHTML(content, parseAllowedLinkPreviews(evt.Content.Raw), replyToUser)
 		}
 
 		if evt.Content.Raw["page.codeberg.everypizza.msc4193.spoiler"] == true {
@@ -1660,11 +1668,11 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 			}
 			sendReq.Attachments = []*discordgo.MessageAttachment{att}
 			isClip := false
-			prep, err := sender.Session.ChannelAttachmentCreate(channelID, &discordgo.ReqPrepareAttachments{
+			prep, err := outboundSender.Session.ChannelAttachmentCreate(channelID, &discordgo.ReqPrepareAttachments{
 				Files: []*discordgo.FilePrepare{{
 					Size: len(data),
 					Name: att.Filename,
-					ID:   sender.NextDiscordUploadID(),
+					ID:   outboundSender.NextDiscordUploadID(),
 
 					IsClip:              &isClip,
 					OriginalContentType: att.OriginalContentType,
@@ -1676,7 +1684,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 			}
 			prepared := prep.Attachments[0]
 			att.UploadedFilename = prepared.UploadFilename
-			err = uploadDiscordAttachment(sender.Session.Client, prepared.UploadURL, data)
+			err = uploadDiscordAttachment(outboundSender.Session.Client, prepared.UploadURL, data)
 			if err != nil {
 				go portal.sendMessageMetrics(evt, err, "Error reuploading media in")
 				return
@@ -1691,6 +1699,9 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 	default:
 		go portal.sendMessageMetrics(evt, fmt.Errorf("%w %q", errUnknownMsgType, content.MsgType), "Ignoring")
 		return
+	}
+	if sendReq.AllowedMentions != nil {
+		portal.applyIdentityReplyMentions(content, sendReq.AllowedMentions, replyToUser)
 	}
 	silentReply := content.Mentions != nil && replyToMXID != "" &&
 		(len(content.Mentions.UserIDs) == 0 || (replyToUser != "" && !slices.Contains(content.Mentions.UserIDs, replyToUser)))
@@ -1735,7 +1746,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 			AllowedMentions: sendReq.AllowedMentions,
 		})
 	}
-	sender.handlePossible40002(err)
+	outboundSender.handlePossible40002(err)
 	go portal.sendMessageMetrics(evt, err, "Error sending")
 	if msg != nil {
 		dbMsg := portal.bridge.DB.Message.New()
@@ -1746,7 +1757,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 		}
 		dbMsg.MXID = evt.ID
 		if sess != nil {
-			dbMsg.SenderID = sender.DiscordID
+			dbMsg.SenderID = outboundSender.DiscordID
 		} else {
 			dbMsg.SenderID = portal.RelayWebhookID
 		}
@@ -1929,11 +1940,12 @@ func (portal *Portal) getMatrixUsers() ([]id.UserID, error) {
 }
 
 func (portal *Portal) handleMatrixReaction(sender *User, evt *event.Event) {
-	if !sender.IsLoggedIn() {
+	botUser := portal.reactionSessionUser(nil)
+	if botUser == nil {
 		go portal.sendMessageMetrics(evt, errUserNotLoggedIn, "Ignoring")
 		return
 	}
-	if portal.IsPrivateChat() && sender.DiscordID != portal.Key.Receiver {
+	if portal.IsPrivateChat() && botUser.DiscordID != portal.Key.Receiver {
 		go portal.sendMessageMetrics(evt, errUserNotReceiver, "Ignoring")
 		return
 	}
@@ -1960,13 +1972,17 @@ func (portal *Portal) handleMatrixReaction(sender *User, evt *event.Event) {
 		return
 	}
 
+	if portal.isMatrixReactionCrossBridge(evt) {
+		portal.scheduleReactionMirrorRefresh(msg)
+		go portal.sendMessageMetrics(evt, nil, "")
+		return
+	}
+
 	firstMsg := msg
 	if msg.AttachmentID != "" {
 		firstMsg = portal.bridge.DB.Message.GetFirstByDiscordID(portal.Key, msg.DiscordID)
-		// TODO should the emoji be rerouted to the first message if it's different?
 	}
 
-	// Figure out if this is a custom emoji or not.
 	emojiID := reaction.RelatesTo.Key
 	if strings.HasPrefix(emojiID, "mxc://") {
 		uri, _ := id.ParseContentURI(emojiID)
@@ -1983,7 +1999,7 @@ func (portal *Portal) handleMatrixReaction(sender *User, evt *event.Event) {
 		emojiID = variationselector.FullyQualify(emojiID)
 	}
 
-	existing := portal.bridge.DB.Reaction.GetByDiscordID(portal.Key, msg.DiscordID, sender.DiscordID, emojiID)
+	existing := portal.bridge.DB.Reaction.GetByDiscordID(portal.Key, msg.DiscordID, botUser.DiscordID, emojiID)
 	if existing != nil {
 		portal.log.Debug().
 			Str("event_id", evt.ID.String()).
@@ -1993,19 +2009,20 @@ func (portal *Portal) handleMatrixReaction(sender *User, evt *event.Event) {
 		return
 	}
 
-	err := sender.Session.MessageReactionAddUser(portal.GuildID, msg.DiscordProtoChannelID(), msg.DiscordID, emojiID)
+	err := botUser.Session.MessageReactionAddUser(portal.GuildID, msg.DiscordProtoChannelID(), msg.DiscordID, emojiID)
 	go portal.sendMessageMetrics(evt, err, "Error sending")
 	if err == nil {
 		dbReaction := portal.bridge.DB.Reaction.New()
 		dbReaction.Channel = portal.Key
 		dbReaction.MessageID = msg.DiscordID
 		dbReaction.FirstAttachmentID = firstMsg.AttachmentID
-		dbReaction.Sender = sender.DiscordID
+		dbReaction.Sender = botUser.DiscordID
 		dbReaction.EmojiName = emojiID
 		dbReaction.ThreadID = msg.ThreadID
 		dbReaction.MXID = evt.ID
 		dbReaction.Insert()
 	}
+	portal.scheduleReactionMirrorRefresh(msg)
 }
 
 func (portal *Portal) handleDiscordReaction(user *User, reaction *discordgo.MessageReaction, add bool, thread *Thread, member *discordgo.Member) {
@@ -2060,6 +2077,7 @@ func (portal *Portal) handleDiscordReaction(user *User, reaction *discordgo.Mess
 		}
 
 		existing.Delete()
+		portal.scheduleReactionMirrorRefresh(message[0])
 		return
 	} else if existing != nil {
 		log.Debug().Msg("Ignoring duplicate reaction")
@@ -2110,6 +2128,7 @@ func (portal *Portal) handleDiscordReaction(user *User, reaction *discordgo.Mess
 		dbReaction.Insert()
 		portal.sendDeliveryReceipt(dbReaction.MXID)
 	}
+	portal.scheduleReactionMirrorRefresh(message[0])
 }
 
 func (portal *Portal) handleMatrixRedaction(sender *User, evt *event.Event) {
@@ -2150,10 +2169,21 @@ func (portal *Portal) handleMatrixRedaction(sender *User, evt *event.Event) {
 	if sess != nil {
 		reaction := portal.bridge.DB.Reaction.GetByMXID(evt.Redacts)
 		if reaction != nil && reaction.Channel == portal.Key {
-			err := sess.MessageReactionRemoveUser(portal.GuildID, reaction.DiscordProtoChannelID(), reaction.MessageID, reaction.EmojiName, reaction.Sender)
+			redactedEvt, err := portal.MainIntent().GetEvent(portal.MXID, evt.Redacts)
+			if err == nil && redactedEvt != nil && portal.isMatrixReactionCrossBridge(redactedEvt) {
+				if msg := portal.bridge.DB.Message.GetFirstByDiscordID(portal.Key, reaction.MessageID); msg != nil {
+					portal.scheduleReactionMirrorRefresh(msg)
+				}
+				go portal.sendMessageMetrics(evt, nil, "")
+				return
+			}
+			err = sess.MessageReactionRemoveUser(portal.GuildID, reaction.DiscordProtoChannelID(), reaction.MessageID, reaction.EmojiName, reaction.Sender)
 			go portal.sendMessageMetrics(evt, err, "Error sending")
 			if err == nil {
 				reaction.Delete()
+				if msg := portal.bridge.DB.Message.GetFirstByDiscordID(portal.Key, reaction.MessageID); msg != nil {
+					portal.scheduleReactionMirrorRefresh(msg)
+				}
 			}
 			return
 		}
@@ -2367,6 +2397,9 @@ func (portal *Portal) updateRoomAvatar() {
 }
 
 func (portal *Portal) UpdateTopic(topic string) bool {
+	if topic == "" && portal.Topic != "" {
+		return false
+	}
 	if portal.Topic == topic && (portal.TopicSet || portal.MXID == "") {
 		return false
 	}

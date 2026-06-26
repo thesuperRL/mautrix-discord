@@ -36,6 +36,7 @@ import (
 	"maunium.net/go/mautrix/id"
 
 	"go.mau.fi/mautrix-discord/database"
+	"go.mau.fi/mautrix-discord/pkg/governancedata"
 )
 
 type ConvertedMessage struct {
@@ -325,12 +326,7 @@ func (portal *Portal) convertDiscordMessage(ctx context.Context, puppet *Puppet,
 			parts = append(parts, part)
 		}
 	}
-	if len(parts) == 0 && msg.Thread != nil {
-		parts = append(parts, &ConvertedMessage{Type: event.EventMessage, Content: &event.MessageEventContent{
-			MsgType: event.MsgText,
-			Body:    fmt.Sprintf("Created a thread: %s", msg.Thread.Name),
-		}})
-	}
+	// Skip thread-only Discord messages (no content); they mirror badly to Slack.
 	for _, part := range parts {
 		puppet.addWebhookMeta(part, msg)
 		puppet.addMemberMeta(part, msg)
@@ -673,6 +669,17 @@ func (portal *Portal) convertDiscordMentions(msg *discordgo.Message, syncGhosts 
 	if msg.MentionEveryone {
 		matrixMentions.Room = true
 	}
+	// A ping of the owning team's role counts as a room ping so it mirrors to
+	// @channel on Slack. Pings of other teams' roles (wrong channel) do not.
+	if team := governancedata.Get().TeamForDiscordChannel(portal.Key.ChannelID); team != nil {
+		for _, roleID := range msg.MentionRoles {
+			role := portal.bridge.DB.Role.GetByID(portal.GuildID, roleID)
+			if role != nil && strings.EqualFold(role.Name, team.TeamName) {
+				matrixMentions.Room = true
+				break
+			}
+		}
+	}
 	return &matrixMentions
 }
 
@@ -694,6 +701,9 @@ func (portal *Portal) convertDiscordTextMessage(ctx context.Context, intent *app
 			MsgType: event.MsgEmote,
 			Body:    "joined the server",
 		}}
+	} else if msg.Type == discordgo.MessageTypeThreadCreated || msg.Type == discordgo.MessageTypeThreadStarterMessage {
+		// Discord thread creation system messages (name / starter) must not mirror to Slack.
+		return nil
 	}
 	var htmlParts []string
 	if msg.Interaction != nil {
@@ -749,6 +759,12 @@ func (portal *Portal) convertDiscordTextMessage(ctx context.Context, intent *app
 		case EmbedLinkPreview:
 			log := with.Str("computed_embed_type", "link preview").Logger()
 			previews = append(previews, portal.convertDiscordLinkEmbedToBeeper(log.WithContext(ctx), intent, embed))
+			// Only inject the URL when Discord didn't include it in the message text.
+			// Otherwise the embed update duplicates the link on Matrix (and Slack relay edits).
+			if embed.URL != "" && !strings.Contains(msg.Content, embed.URL) {
+				escaped := html.EscapeString(embed.URL)
+				htmlParts = append(htmlParts, fmt.Sprintf(`<p><a href="%s">%s</a></p>`, escaped, escaped))
+			}
 		case EmbedVideo:
 			// Ignore video embeds, they're handled as separate messages
 		default:

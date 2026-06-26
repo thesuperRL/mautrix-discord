@@ -82,9 +82,7 @@ func (br *DiscordBridge) threadFound(ctx context.Context, source *User, rootMess
 	thread := br.GetThreadByID(id, rootMessage)
 	log := zerolog.Ctx(ctx)
 	log.Debug().Msg("Marked message as thread root")
-	if thread.CreationNoticeMXID == "" {
-		thread.Parent.sendThreadCreationNotice(ctx, thread)
-	}
+	// Do not bridge thread creation notices to Matrix (bad Slack relay attribution).
 	// TODO member_ids_preview is probably not guaranteed to contain the source user
 	if source != nil && metadata != nil && slices.Contains(metadata.MemberIDsPreview, source.DiscordID) && !source.IsInPortal(thread.ID) {
 		source.MarkInPortal(database.UserPortal{

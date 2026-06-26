@@ -396,7 +396,7 @@ var cmdSetRelay = &commands.FullHandler{
 		Description: "Create or set a relay webhook for a portal",
 		Args:        "[room ID] <​--url URL> OR <​--create [name]>",
 	},
-	RequiresLogin:      true,
+	RequiresLogin:      false,
 	RequiresEventLevel: roomModerator,
 }
 
@@ -469,7 +469,15 @@ func fnSetRelay(ce *WrappedCommandEvent) {
 			return
 		}
 	case "create":
-		perms, err := ce.User.Session.UserChannelPermissions(ce.User.DiscordID, portal.Key.ChannelID, portal.RefererOptIfUser(ce.User.Session, "")...)
+		relayUser := ce.User
+		if !relayUser.IsLoggedIn() {
+			relayUser = ce.Bridge.getLoggedInUserForPortal()
+			if relayUser == nil {
+				ce.Reply("That command requires a logged-in bridge user with permission to manage webhooks in that channel")
+				return
+			}
+		}
+		perms, err := relayUser.Session.UserChannelPermissions(relayUser.DiscordID, portal.Key.ChannelID, portal.RefererOptIfUser(relayUser.Session, "")...)
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to check user permissions")
 			ce.Reply("Failed to check if you have permission to create webhooks")
@@ -484,7 +492,7 @@ func fnSetRelay(ce *WrappedCommandEvent) {
 			name = strings.Join(ce.Args[1:], " ")
 		}
 		log.Debug().Str("webhook_name", name).Msg("Creating webhook")
-		webhookMeta, err = ce.User.Session.WebhookCreate(portal.Key.ChannelID, name, "", portal.RefererOptIfUser(ce.User.Session, "")...)
+		webhookMeta, err = relayUser.Session.WebhookCreate(portal.Key.ChannelID, name, "", portal.RefererOptIfUser(relayUser.Session, "")...)
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to create webhook")
 			ce.Reply("Failed to create webhook: %v", err)

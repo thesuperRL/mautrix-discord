@@ -32,6 +32,9 @@ import (
 	"maunium.net/go/mautrix/format"
 	"maunium.net/go/mautrix/format/mdext"
 	"maunium.net/go/mautrix/id"
+
+	"go.mau.fi/mautrix-discord/pkg/bridgeidentity"
+	"go.mau.fi/mautrix-discord/pkg/governancedata"
 )
 
 // escapeFixer is a hacky partial fix for the difference in escaping markdown, used with escapeReplacement
@@ -99,6 +102,7 @@ const formatterContextPortalKey = "fi.mau.discord.portal"
 const formatterContextAllowedMentionsKey = "fi.mau.discord.allowed_mentions"
 const formatterContextInputAllowedMentionsKey = "fi.mau.discord.input_allowed_mentions"
 const formatterContextInputAllowedLinkPreviewsKey = "fi.mau.discord.input_allowed_link_previews"
+const formatterContextReplyToUserKey = "fi.mau.discord.reply_to_user"
 
 func appendIfNotContains(arr []string, newItem string) []string {
 	for _, item := range arr {
@@ -155,6 +159,20 @@ func (br *DiscordBridge) pillConverter(displayname, mxid, eventID string, ctx fo
 		if mentionedUser != nil && mentionedUser.DiscordID != "" {
 			mentions.Users = appendIfNotContains(mentions.Users, mentionedUser.DiscordID)
 			return fmt.Sprintf("<@%s>", mentionedUser.DiscordID)
+		}
+		if slackUserID := bridgeidentity.ParseSlackGhostUserID(id.UserID(mxid)); slackUserID != "" {
+			if discordID := bridgeidentity.Get().DiscordIDForSlack(slackUserID); discordID != "" {
+				mentions.Users = appendIfNotContains(mentions.Users, discordID)
+				return fmt.Sprintf("<@%s>", discordID)
+			}
+		}
+		if replyToUser, ok := ctx.ReturnData[formatterContextReplyToUserKey].(id.UserID); ok && replyToUser != "" {
+			if bridgeidentity.IsSlackBridgeBot(id.UserID(mxid)) || bridgeidentity.IsDiscordBridgeBot(id.UserID(mxid)) {
+				if discordID := bridgeidentity.DiscordIDForMXID(replyToUser); discordID != "" {
+					mentions.Users = appendIfNotContains(mentions.Users, discordID)
+					return fmt.Sprintf("<@%s>", discordID)
+				}
+			}
 		}
 	}
 	return displayname
@@ -239,22 +257,182 @@ var matrixHTMLParser = &format.HTMLParser{
 	},
 }
 
-func (portal *Portal) parseMatrixHTML(content *event.MessageEventContent, allowedLinkPreviews []string) (string, *discordgo.MessageAllowedMentions) {
+
+func (portal *Portal) matrixUserDisplayName(mxid id.UserID) string {
+	if puppet := portal.bridge.GetPuppetByMXID(mxid); puppet != nil && puppet.Name != "" {
+		return puppet.Name
+	}
+	if member := portal.bridge.StateStore.GetMember(portal.MXID, mxid); member != nil && member.Displayname != "" {
+		return member.Displayname
+	}
+	return ""
+}
+
+func removeAllowedMentionUser(users []string, id string) []string {
+	out := users[:0]
+	for _, u := range users {
+		if u != id {
+			out = append(out, u)
+		}
+	}
+	return out
+}
+
+func appendAllowedMentionParse(types []discordgo.AllowedMentionType, t discordgo.AllowedMentionType) []discordgo.AllowedMentionType {
+	for _, existing := range types {
+		if existing == t {
+			return types
+		}
+	}
+	return append(types, t)
+}
+
+// governanceTeamRoleID returns the Discord role whose name matches the team that
+// owns this channel in governance (the role governance auto-assigns to members).
+func (portal *Portal) governanceTeamRoleID(teamName string) string {
+	if portal.GuildID == "" || teamName == "" {
+		return ""
+	}
+	for _, role := range portal.bridge.DB.Role.GetAll(portal.GuildID) {
+		if strings.EqualFold(role.Name, teamName) {
+			return role.ID
+		}
+	}
+	return ""
+}
+
+func (portal *Portal) replaceMatrixPingsInDiscordText(content *event.MessageEventContent, text string, allowedMentions *discordgo.MessageAllowedMentions, replyToUser id.UserID) string {
+	if content.Mentions == nil {
+		return text
+	}
+	if content.Mentions.Room {
+		// Only convert a room ping to a real ping when governance says this channel
+		// belongs to a team: ping that team's role. There is no fallback - org-wide
+		// or unlinked channels (and teams whose role is missing) silently fail, so
+		// "@room" stays as inert text and nothing is pinged.
+		if team := governancedata.Get().TeamForDiscordChannel(portal.Key.ChannelID); team != nil {
+			if roleID := portal.governanceTeamRoleID(team.TeamName); roleID != "" {
+				rolePing := fmt.Sprintf("<@&%s>", roleID)
+				for _, kw := range []string{"@room", "[@room]", "@\u2063ro\u2063om", "@here", "@everyone"} {
+					text = strings.ReplaceAll(text, kw, rolePing)
+				}
+				if !strings.Contains(text, rolePing) {
+					if text == "" {
+						text = rolePing
+					} else {
+						text = rolePing + " " + text
+					}
+				}
+				allowedMentions.Roles = appendIfNotContains(allowedMentions.Roles, roleID)
+			}
+		}
+	}
+	for _, userID := range content.Mentions.UserIDs {
+		if replyToUser != "" && (bridgeidentity.IsDiscordBridgeBot(userID) || bridgeidentity.IsSlackBridgeBot(userID)) {
+			if discordID := bridgeidentity.DiscordIDForMXID(replyToUser); discordID != "" {
+				name := portal.matrixUserDisplayName(userID)
+				if name != "" {
+					ping := fmt.Sprintf("<@%s>", discordID)
+					if !strings.Contains(text, ping) {
+						text = strings.ReplaceAll(text, name, ping)
+						escaped := escapeDiscordMarkdown(name)
+						if escaped != name {
+							text = strings.ReplaceAll(text, escaped, ping)
+						}
+					}
+					allowedMentions.Users = appendIfNotContains(allowedMentions.Users, discordID)
+				}
+				continue
+			}
+		}
+		if discordID, ok := portal.bridge.ParsePuppetMXID(userID); ok {
+			if bridgeidentity.Get().HasDiscord(discordID) {
+				continue
+			}
+			name := portal.matrixUserDisplayName(userID)
+			if name == "" {
+				continue
+			}
+			label := "[" + name + "]"
+			text = strings.ReplaceAll(text, fmt.Sprintf("<@%s>", discordID), label)
+			allowedMentions.Users = removeAllowedMentionUser(allowedMentions.Users, discordID)
+			continue
+		}
+		if slackUserID := bridgeidentity.ParseSlackGhostUserID(userID); slackUserID != "" {
+			if discordID := bridgeidentity.Get().DiscordIDForSlack(slackUserID); discordID != "" {
+				name := portal.matrixUserDisplayName(userID)
+				if name != "" {
+					ping := fmt.Sprintf("<@%s>", discordID)
+					if !strings.Contains(text, ping) {
+						text = strings.ReplaceAll(text, name, ping)
+						escaped := escapeDiscordMarkdown(name)
+						if escaped != name {
+							text = strings.ReplaceAll(text, escaped, ping)
+						}
+					}
+					allowedMentions.Users = appendIfNotContains(allowedMentions.Users, discordID)
+				}
+				continue
+			}
+		}
+		if discordID := bridgeidentity.DiscordIDForMXID(userID); discordID != "" {
+			if _, ok := portal.bridge.ParsePuppetMXID(userID); ok {
+				continue
+			}
+			if bridgeidentity.ParseSlackGhostUserID(userID) != "" {
+				continue
+			}
+			name := portal.matrixUserDisplayName(userID)
+			if name != "" {
+				ping := fmt.Sprintf("<@%s>", discordID)
+				if !strings.Contains(text, ping) {
+					text = strings.ReplaceAll(text, name, ping)
+					escaped := escapeDiscordMarkdown(name)
+					if escaped != name {
+						text = strings.ReplaceAll(text, escaped, ping)
+					}
+				}
+				allowedMentions.Users = appendIfNotContains(allowedMentions.Users, discordID)
+			}
+			continue
+		}
+		name := portal.matrixUserDisplayName(userID)
+		if name == "" {
+			continue
+		}
+		label := "[" + name + "]"
+		escaped := escapeDiscordMarkdown(name)
+		if escaped != name {
+			text = strings.ReplaceAll(text, escaped, label)
+		}
+		text = strings.ReplaceAll(text, name, label)
+	}
+	return text
+}
+
+func (portal *Portal) parseMatrixHTML(content *event.MessageEventContent, allowedLinkPreviews []string, replyToUser id.UserID) (string, *discordgo.MessageAllowedMentions) {
+	if content.Mentions != nil {
+		content.Mentions.UserIDs = bridgeidentity.DedupeLinkedMentions(content.Mentions.UserIDs)
+	}
 	allowedMentions := &discordgo.MessageAllowedMentions{
 		Parse:       []discordgo.AllowedMentionType{},
 		Users:       []string{},
 		RepliedUser: true,
 	}
+	var out string
 	if content.Format == event.FormatHTML && len(content.FormattedBody) > 0 {
 		ctx := format.NewContext()
 		ctx.ReturnData[formatterContextInputAllowedLinkPreviewsKey] = allowedLinkPreviews
 		ctx.ReturnData[formatterContextPortalKey] = portal
 		ctx.ReturnData[formatterContextAllowedMentionsKey] = allowedMentions
+		ctx.ReturnData[formatterContextReplyToUserKey] = replyToUser
 		if content.Mentions != nil {
 			ctx.ReturnData[formatterContextInputAllowedMentionsKey] = content.Mentions.UserIDs
 		}
-		return variationselector.FullyQualify(matrixHTMLParser.Parse(content.FormattedBody, ctx)), allowedMentions
+		out = variationselector.FullyQualify(matrixHTMLParser.Parse(content.FormattedBody, ctx))
 	} else {
-		return variationselector.FullyQualify(escapeDiscordMarkdown(content.Body)), allowedMentions
+		out = variationselector.FullyQualify(escapeDiscordMarkdown(content.Body))
 	}
+	out = portal.replaceMatrixPingsInDiscordText(content, out, allowedMentions, replyToUser)
+	return out, allowedMentions
 }

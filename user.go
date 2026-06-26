@@ -30,6 +30,7 @@ import (
 	"maunium.net/go/mautrix/id"
 	"maunium.net/go/mautrix/pushrules"
 
+	"go.mau.fi/mautrix-discord/pkg/bridgeidentity"
 	"go.mau.fi/mautrix-discord/database"
 )
 
@@ -204,6 +205,47 @@ func (br *DiscordBridge) GetCachedUserByMXID(userID id.UserID) *User {
 	return br.usersByMXID[userID]
 }
 
+func (br *DiscordBridge) GetConnectedUserByMXID(userID id.UserID) *User {
+	br.usersLock.Lock()
+	defer br.usersLock.Unlock()
+	if u := br.usersByMXID[userID]; u != nil && u.Session != nil {
+		return u
+	}
+	for _, u := range br.usersByMXID {
+		if u.MXID == userID && u.Session != nil {
+			return u
+		}
+	}
+	return nil
+}
+
+func (br *DiscordBridge) GetConnectedUserByDiscordID(discordID string) *User {
+	br.usersLock.Lock()
+	defer br.usersLock.Unlock()
+	if u := br.usersByID[discordID]; u != nil && u.Session != nil {
+		return u
+	}
+	return nil
+}
+
+func (br *DiscordBridge) GetConnectedUserForSlackUID(slackUID string) *User {
+	identity := bridgeidentity.GetCached()
+	br.usersLock.Lock()
+	defer br.usersLock.Unlock()
+	for _, u := range br.usersByMXID {
+		if u.Session == nil {
+			continue
+		}
+		lp, domain, err := u.MXID.Parse()
+		if err != nil {
+			continue
+		}
+		if strings.EqualFold(identity.SlackUserIDForMatrixLocalpart(lp, domain), slackUID) {
+			return u
+		}
+	}
+	return nil
+}
 func (br *DiscordBridge) NewUser(dbUser *database.User) *User {
 	user := &User{
 		User:   dbUser,

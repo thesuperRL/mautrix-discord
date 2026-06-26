@@ -23,6 +23,7 @@ type Database struct {
 	Guild    *GuildQuery
 	Role     *RoleQuery
 	File     *FileQuery
+	ReactionMirror *ReactionMirrorQuery
 }
 
 func New(baseDB *dbutil.Database, log maulogger.Logger) *Database {
@@ -63,6 +64,10 @@ func New(baseDB *dbutil.Database, log maulogger.Logger) *Database {
 	db.File = &FileQuery{
 		db:  db,
 		log: log.Sub("File"),
+	}
+	db.ReactionMirror = &ReactionMirrorQuery{
+		db:  db,
+		log: log.Sub("ReactionMirror"),
 	}
 	return db
 }
