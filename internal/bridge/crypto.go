@@ -123,7 +123,7 @@ func (helper *CryptoHelper) Init() error {
 	helper.client.Syncer = &cryptoSyncer{helper.mach}
 	helper.client.Store = helper.store
 
-	err = helper.mach.Load()
+	err = helper.mach.Load(context.Background())
 	if err != nil {
 		return err
 	}
@@ -234,7 +234,7 @@ func (helper *CryptoHelper) loginBot() (*mautrix.Client, bool, error) {
 	initialDeviceDisplayName := fmt.Sprintf("%s bridge", helper.bridge.ProtocolName)
 	if helper.bridge.Config.Bridge.GetEncryptionConfig().MSC4190 {
 		helper.log.Debug().Msg("Creating bot device with MSC4190")
-		err := client.CreateDeviceMSC4190(deviceID, initialDeviceDisplayName)
+		err := client.CreateDeviceMSC4190(context.Background(), deviceID, initialDeviceDisplayName)
 		if err != nil {
 			return nil, deviceID != "", fmt.Errorf("failed to create device for bridge bot: %w", err)
 		}
@@ -268,7 +268,7 @@ func (helper *CryptoHelper) loginBot() (*mautrix.Client, bool, error) {
 
 func (helper *CryptoHelper) verifyKeysAreOnServer() {
 	helper.log.Debug().Msg("Making sure keys are still on server")
-	resp, err := helper.client.QueryKeys(&mautrix.ReqQueryKeys{
+	resp, err := helper.client.QueryKeys(context.Background(), &mautrix.ReqQueryKeys{
 		DeviceKeys: map[id.UserID]mautrix.DeviceIDList{
 			helper.client.UserID: {helper.client.DeviceID},
 		},
@@ -345,7 +345,7 @@ func (helper *CryptoHelper) Reset(startAfterReset bool) {
 	helper.log.Debug().Msg("Crypto syncer stopped, clearing database")
 	helper.clearDatabase()
 	helper.log.Debug().Msg("Crypto database cleared, logging out of all sessions")
-	_, err := helper.client.LogoutAll()
+	_, err := helper.client.LogoutAll(context.Background())
 	if err != nil {
 		helper.log.Warn().Err(err).Msg("Failed to log out all devices")
 	}
@@ -385,7 +385,7 @@ func (helper *CryptoHelper) Encrypt(roomID id.RoomID, evtType event.Type, conten
 			Str("room_id", roomID.String()).
 			Msg("Got error while encrypting event for room, sharing group session and trying again...")
 		var users []id.UserID
-		users, err = helper.store.GetRoomJoinedOrInvitedMembers(roomID)
+		users, err = helper.store.GetRoomJoinedOrInvitedMembers(ctx, roomID)
 		if err != nil {
 			err = fmt.Errorf("failed to get room member list: %w", err)
 		} else if err = helper.mach.ShareGroupSession(ctx, roomID, users); err != nil {
@@ -404,7 +404,7 @@ func (helper *CryptoHelper) Encrypt(roomID id.RoomID, evtType event.Type, conten
 func (helper *CryptoHelper) WaitForSession(roomID id.RoomID, senderKey id.SenderKey, sessionID id.SessionID, timeout time.Duration) bool {
 	helper.lock.RLock()
 	defer helper.lock.RUnlock()
-	return helper.mach.WaitForSession(roomID, senderKey, sessionID, timeout)
+	return helper.mach.WaitForSession(context.Background(), roomID, senderKey, sessionID, timeout)
 }
 
 func (helper *CryptoHelper) RequestSession(roomID id.RoomID, senderKey id.SenderKey, sessionID id.SessionID, userID id.UserID, deviceID id.DeviceID) {
@@ -413,7 +413,7 @@ func (helper *CryptoHelper) RequestSession(roomID id.RoomID, senderKey id.Sender
 	if deviceID == "" {
 		deviceID = "*"
 	}
-	err := helper.mach.SendRoomKeyRequest(roomID, senderKey, sessionID, "", map[id.UserID][]id.DeviceID{userID: {deviceID}})
+	err := helper.mach.SendRoomKeyRequest(context.Background(), roomID, senderKey, sessionID, "", map[id.UserID][]id.DeviceID{userID: {deviceID}})
 	if err != nil {
 		helper.log.Warn().Err(err).
 			Str("user_id", userID.String()).
@@ -434,7 +434,7 @@ func (helper *CryptoHelper) RequestSession(roomID id.RoomID, senderKey id.Sender
 func (helper *CryptoHelper) ResetSession(roomID id.RoomID) {
 	helper.lock.RLock()
 	defer helper.lock.RUnlock()
-	err := helper.mach.CryptoStore.RemoveOutboundGroupSession(roomID)
+	err := helper.mach.CryptoStore.RemoveOutboundGroupSession(context.Background(), roomID)
 	if err != nil {
 		helper.log.Debug().Err(err).
 			Str("room_id", roomID.String()).
@@ -445,7 +445,7 @@ func (helper *CryptoHelper) ResetSession(roomID id.RoomID) {
 func (helper *CryptoHelper) HandleMemberEvent(evt *event.Event) {
 	helper.lock.RLock()
 	defer helper.lock.RUnlock()
-	helper.mach.HandleMemberEvent(0, evt)
+	helper.mach.HandleMemberEvent(context.Background(), evt)
 }
 
 // ShareKeys uploads the given number of one-time-keys to the server.
@@ -457,7 +457,7 @@ type cryptoSyncer struct {
 	*crypto.OlmMachine
 }
 
-func (syncer *cryptoSyncer) ProcessResponse(resp *mautrix.RespSync, since string) error {
+func (syncer *cryptoSyncer) ProcessResponse(ctx context.Context, resp *mautrix.RespSync, since string) error {
 	done := make(chan struct{})
 	go func() {
 		defer func() {
@@ -471,7 +471,7 @@ func (syncer *cryptoSyncer) ProcessResponse(resp *mautrix.RespSync, since string
 			done <- struct{}{}
 		}()
 		syncer.Log.Trace().Str("since", since).Msg("Starting sync response handling")
-		syncer.ProcessSyncResponse(resp, since)
+		syncer.ProcessSyncResponse(ctx, resp, since)
 		syncer.Log.Trace().Str("since", since).Msg("Successfully handled sync response")
 	}()
 	select {

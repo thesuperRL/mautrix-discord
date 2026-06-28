@@ -37,9 +37,9 @@ func NewSQLCryptoStore(db *dbutil.Database, log dbutil.DatabaseLogger, userID id
 	}
 }
 
-func (store *SQLCryptoStore) GetRoomJoinedOrInvitedMembers(roomID id.RoomID) (members []id.UserID, err error) {
+func (store *SQLCryptoStore) GetRoomJoinedOrInvitedMembers(ctx context.Context, roomID id.RoomID) (members []id.UserID, err error) {
 	var rows dbutil.Rows
-	rows, err = store.DB.Query(context.Background(), `
+	rows, err = store.DB.Query(ctx, `
 		SELECT user_id FROM mx_user_profile
 		WHERE room_id=$1
 			AND (membership='join' OR membership='invite')
