@@ -44,4 +44,5 @@ require (
 )
 
 replace github.com/bwmarrin/discordgo => github.com/beeper/discordgo v0.0.0-20260215125047-ccf8cbaa0a9f
-replace maunium.net/go/mautrix => ../mautrix-go
+
+replace maunium.net/go/mautrix => github.com/thesuperRL/mautrix-go v0.0.0-20260628214018-9a4f178d8d06
