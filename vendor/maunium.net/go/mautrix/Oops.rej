@@ -1,0 +1,33 @@
+@@ -1576,7 +1576,16 @@
+ 	} else if reactionTarget == nil {
+ 		log.Warn().Msg("Reaction target message not found in database")
+ 		return EventHandlingResultFailed.WithMSSError(fmt.Errorf("reaction %w", ErrTargetMessageNotFound))
+ 	}
++	if hook, ok := portal.Bridge.Network.(interface {
++		ReactionMirrorHook(ctx context.Context, portal *Portal, targetMXID id.EventID)
++	}); ok {
++		if skipHook, ok := portal.Bridge.Network.(interface {
++			ShouldSkipReactionMirrorHook(ctx context.Context, portal *Portal, evt *event.Event) bool
++		}); !ok || !skipHook.ShouldSkipReactionMirrorHook(ctx, portal, evt) {
++			hook.ReactionMirrorHook(ctx, portal, reactionTarget.MXID)
++		}
++	}
+ 	caps := sender.Client.GetCapabilities(ctx, portal)
+ 	err = portal.autoAcceptMessageRequest(ctx, evt, sender, nil, caps)
+ 	if err != nil {
+@@ -2538,6 +2547,15 @@
+ 	if err != nil {
+ 		log.Err(err).Msg("Failed to delete redacted event from database")
+ 	}
++	if redactionTargetReaction != nil {
++		if hook, ok := portal.Bridge.Network.(interface {
++			ReactionMirrorHook(ctx context.Context, portal *Portal, targetMXID id.EventID)
++		}); ok {
++			if targetMsg, err := portal.Bridge.DB.Message.GetPartByID(ctx, portal.Receiver, redactionTargetReaction.MessageID, redactionTargetReaction.MessagePartID); err == nil && targetMsg != nil {
++				hook.ReactionMirrorHook(ctx, portal, targetMsg.MXID)
++			}
++		}
++	}
+ 	return EventHandlingResultSuccess.WithMSS()
+ }
+ 

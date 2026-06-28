@@ -1,0 +1,230 @@
+# filippo.io/edwards25519 v1.2.0
+## explicit; go 1.24.0
+filippo.io/edwards25519
+filippo.io/edwards25519/field
+# github.com/bwmarrin/discordgo v0.27.0 => github.com/beeper/discordgo v0.0.0-20260215125047-ccf8cbaa0a9f
+## explicit; go 1.19
+github.com/bwmarrin/discordgo
+# github.com/coder/websocket v1.8.14
+## explicit; go 1.23
+github.com/coder/websocket
+github.com/coder/websocket/internal/bpool
+github.com/coder/websocket/internal/errd
+github.com/coder/websocket/internal/util
+github.com/coder/websocket/internal/wsjs
+# github.com/coreos/go-systemd/v22 v22.7.0
+## explicit; go 1.23
+github.com/coreos/go-systemd/v22/journal
+# github.com/davecgh/go-spew v1.1.1
+## explicit
+github.com/davecgh/go-spew/spew
+# github.com/gabriel-vasile/mimetype v1.4.9
+## explicit; go 1.23.0
+github.com/gabriel-vasile/mimetype
+github.com/gabriel-vasile/mimetype/internal/charset
+github.com/gabriel-vasile/mimetype/internal/json
+github.com/gabriel-vasile/mimetype/internal/magic
+# github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510
+## explicit; go 1.13
+github.com/google/shlex
+# github.com/google/uuid v1.6.0
+## explicit
+github.com/google/uuid
+# github.com/gorilla/mux v1.8.0
+## explicit; go 1.12
+github.com/gorilla/mux
+# github.com/gorilla/websocket v1.5.0
+## explicit; go 1.12
+github.com/gorilla/websocket
+# github.com/lib/pq v1.12.3
+## explicit; go 1.21
+github.com/lib/pq
+github.com/lib/pq/internal/pgpass
+github.com/lib/pq/internal/pgservice
+github.com/lib/pq/internal/pqsql
+github.com/lib/pq/internal/pqtime
+github.com/lib/pq/internal/pqutil
+github.com/lib/pq/internal/proto
+github.com/lib/pq/oid
+github.com/lib/pq/pqerror
+github.com/lib/pq/scram
+# github.com/mattn/go-colorable v0.1.14
+## explicit; go 1.18
+github.com/mattn/go-colorable
+# github.com/mattn/go-isatty v0.0.20
+## explicit; go 1.15
+github.com/mattn/go-isatty
+# github.com/mattn/go-sqlite3 v1.14.44
+## explicit; go 1.21
+github.com/mattn/go-sqlite3
+# github.com/petermattis/goid v0.0.0-20260330135022-df67b199bc81
+## explicit; go 1.17
+github.com/petermattis/goid
+# github.com/pmezard/go-difflib v1.0.0
+## explicit
+github.com/pmezard/go-difflib/difflib
+# github.com/rs/xid v1.6.0
+## explicit; go 1.16
+github.com/rs/xid
+# github.com/rs/zerolog v1.35.1
+## explicit; go 1.23
+github.com/rs/zerolog
+github.com/rs/zerolog/hlog
+github.com/rs/zerolog/hlog/internal/mutil
+github.com/rs/zerolog/internal/cbor
+github.com/rs/zerolog/internal/json
+github.com/rs/zerolog/journald
+github.com/rs/zerolog/log
+# github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
+## explicit; go 1.13
+github.com/skip2/go-qrcode
+github.com/skip2/go-qrcode/bitset
+github.com/skip2/go-qrcode/reedsolomon
+# github.com/stretchr/testify v1.11.1
+## explicit; go 1.17
+github.com/stretchr/testify/assert
+github.com/stretchr/testify/assert/yaml
+# github.com/tidwall/gjson v1.19.0
+## explicit; go 1.23
+github.com/tidwall/gjson
+# github.com/tidwall/match v1.1.1
+## explicit; go 1.15
+github.com/tidwall/match
+# github.com/tidwall/pretty v1.2.1
+## explicit; go 1.16
+github.com/tidwall/pretty
+# github.com/tidwall/sjson v1.2.5
+## explicit; go 1.14
+github.com/tidwall/sjson
+# github.com/yuin/goldmark v1.8.2
+## explicit; go 1.22
+github.com/yuin/goldmark
+github.com/yuin/goldmark/ast
+github.com/yuin/goldmark/extension
+github.com/yuin/goldmark/extension/ast
+github.com/yuin/goldmark/parser
+github.com/yuin/goldmark/renderer
+github.com/yuin/goldmark/renderer/html
+github.com/yuin/goldmark/text
+github.com/yuin/goldmark/util
+# go.mau.fi/util v0.9.9
+## explicit; go 1.25.0
+go.mau.fi/util/base58
+go.mau.fi/util/configupgrade
+go.mau.fi/util/confusable
+go.mau.fi/util/dbutil
+go.mau.fi/util/dbutil/litestream
+go.mau.fi/util/exbytes
+go.mau.fi/util/exerrors
+go.mau.fi/util/exgjson
+go.mau.fi/util/exhttp
+go.mau.fi/util/exmaps
+go.mau.fi/util/exmime
+go.mau.fi/util/exslices
+go.mau.fi/util/exstrings
+go.mau.fi/util/exsync
+go.mau.fi/util/exzerolog
+go.mau.fi/util/ffmpeg
+go.mau.fi/util/glob
+go.mau.fi/util/jsonbytes
+go.mau.fi/util/jsontime
+go.mau.fi/util/pkcs7
+go.mau.fi/util/ptr
+go.mau.fi/util/random
+go.mau.fi/util/requestlog
+go.mau.fi/util/retryafter
+go.mau.fi/util/variationselector
+# go.mau.fi/zeroconfig v0.2.0
+## explicit; go 1.24.0
+go.mau.fi/zeroconfig
+# golang.org/x/crypto v0.51.0
+## explicit; go 1.25.0
+golang.org/x/crypto/curve25519
+golang.org/x/crypto/hkdf
+golang.org/x/crypto/internal/alias
+golang.org/x/crypto/internal/poly1305
+golang.org/x/crypto/nacl/secretbox
+golang.org/x/crypto/pbkdf2
+golang.org/x/crypto/salsa20/salsa
+# golang.org/x/exp v0.0.0-20260508232706-74f9aab9d74a
+## explicit; go 1.25.0
+golang.org/x/exp/constraints
+golang.org/x/exp/maps
+golang.org/x/exp/slices
+# golang.org/x/net v0.54.0
+## explicit; go 1.25.0
+golang.org/x/net/html
+golang.org/x/net/html/atom
+golang.org/x/net/http/httpguts
+golang.org/x/net/http2
+golang.org/x/net/http2/hpack
+golang.org/x/net/idna
+golang.org/x/net/internal/httpcommon
+golang.org/x/net/internal/httpsfv
+golang.org/x/net/internal/socks
+golang.org/x/net/proxy
+golang.org/x/net/publicsuffix
+# golang.org/x/sync v0.20.0
+## explicit; go 1.25.0
+golang.org/x/sync/semaphore
+# golang.org/x/sys v0.44.0
+## explicit; go 1.25.0
+golang.org/x/sys/cpu
+golang.org/x/sys/unix
+golang.org/x/sys/windows
+# golang.org/x/text v0.37.0
+## explicit; go 1.25.0
+golang.org/x/text/secure/bidirule
+golang.org/x/text/transform
+golang.org/x/text/unicode/bidi
+golang.org/x/text/unicode/norm
+# gopkg.in/natefinch/lumberjack.v2 v2.2.1
+## explicit; go 1.13
+gopkg.in/natefinch/lumberjack.v2
+# gopkg.in/yaml.v3 v3.0.1
+## explicit
+gopkg.in/yaml.v3
+# maunium.net/go/mauflag v1.0.0
+## explicit
+maunium.net/go/mauflag
+# maunium.net/go/maulogger/v2 v2.4.1
+## explicit; go 1.19
+maunium.net/go/maulogger/v2
+maunium.net/go/maulogger/v2/maulogadapt
+# maunium.net/go/mautrix v0.28.0 => github.com/thesuperRL/mautrix-go v0.0.0-20260628213958-cfd090ee7c51
+## explicit; go 1.25.0
+maunium.net/go/mautrix
+maunium.net/go/mautrix/appservice
+maunium.net/go/mautrix/crypto
+maunium.net/go/mautrix/crypto/aescbc
+maunium.net/go/mautrix/crypto/attachment
+maunium.net/go/mautrix/crypto/backup
+maunium.net/go/mautrix/crypto/canonicaljson
+maunium.net/go/mautrix/crypto/ed25519
+maunium.net/go/mautrix/crypto/goolm
+maunium.net/go/mautrix/crypto/goolm/account
+maunium.net/go/mautrix/crypto/goolm/aessha2
+maunium.net/go/mautrix/crypto/goolm/crypto
+maunium.net/go/mautrix/crypto/goolm/goolmbase64
+maunium.net/go/mautrix/crypto/goolm/libolmpickle
+maunium.net/go/mautrix/crypto/goolm/megolm
+maunium.net/go/mautrix/crypto/goolm/message
+maunium.net/go/mautrix/crypto/goolm/pk
+maunium.net/go/mautrix/crypto/goolm/ratchet
+maunium.net/go/mautrix/crypto/goolm/session
+maunium.net/go/mautrix/crypto/libolm
+maunium.net/go/mautrix/crypto/olm
+maunium.net/go/mautrix/crypto/signatures
+maunium.net/go/mautrix/crypto/sql_store_upgrade
+maunium.net/go/mautrix/crypto/ssss
+maunium.net/go/mautrix/crypto/utils
+maunium.net/go/mautrix/event
+maunium.net/go/mautrix/federation
+maunium.net/go/mautrix/federation/signutil
+maunium.net/go/mautrix/format
+maunium.net/go/mautrix/format/mdext
+maunium.net/go/mautrix/id
+maunium.net/go/mautrix/pushrules
+maunium.net/go/mautrix/sqlstatestore
+# github.com/bwmarrin/discordgo => github.com/beeper/discordgo v0.0.0-20260215125047-ccf8cbaa0a9f
+# maunium.net/go/mautrix => github.com/thesuperRL/mautrix-go v0.0.0-20260628213958-cfd090ee7c51
