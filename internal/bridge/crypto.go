@@ -111,7 +111,7 @@ func (helper *CryptoHelper) Init() error {
 	}
 
 	if encryptionConfig.DeleteKeys.DeleteOutdatedInbound {
-		deleted, err := helper.store.RedactOutdatedGroupSessions()
+		deleted, err := helper.store.RedactOutdatedGroupSessions(context.Background())
 		if err != nil {
 			return err
 		}
@@ -223,7 +223,10 @@ func (helper *CryptoHelper) allowKeyShare(ctx context.Context, device *id.Device
 }
 
 func (helper *CryptoHelper) loginBot() (*mautrix.Client, bool, error) {
-	deviceID := helper.store.FindDeviceID()
+	deviceID, err := helper.store.FindDeviceID(context.Background())
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to find device ID: %w", err)
+	}
 	if len(deviceID) > 0 {
 		helper.log.Debug().Str("device_id", deviceID.String()).Msg("Found existing device ID for bot in database")
 	}
@@ -493,14 +496,14 @@ func (syncer *cryptoSyncer) OnFailedSync(_ *mautrix.RespSync, err error) (time.D
 func (syncer *cryptoSyncer) GetFilterJSON(_ id.UserID) *mautrix.Filter {
 	everything := []event.Type{{Type: "*"}}
 	return &mautrix.Filter{
-		Presence:    mautrix.FilterPart{NotTypes: everything},
-		AccountData: mautrix.FilterPart{NotTypes: everything},
-		Room: mautrix.RoomFilter{
+		Presence:    &mautrix.FilterPart{NotTypes: everything},
+		AccountData: &mautrix.FilterPart{NotTypes: everything},
+		Room: &mautrix.RoomFilter{
 			IncludeLeave: false,
-			Ephemeral:    mautrix.FilterPart{NotTypes: everything},
-			AccountData:  mautrix.FilterPart{NotTypes: everything},
-			State:        mautrix.FilterPart{NotTypes: everything},
-			Timeline:     mautrix.FilterPart{NotTypes: everything},
+			Ephemeral:    &mautrix.FilterPart{NotTypes: everything},
+			AccountData:  &mautrix.FilterPart{NotTypes: everything},
+			State:        &mautrix.FilterPart{NotTypes: everything},
+			Timeline:     &mautrix.FilterPart{NotTypes: everything},
 		},
 	}
 }
