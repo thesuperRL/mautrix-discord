@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -118,7 +119,7 @@ func (br *DiscordBridge) pillConverter(displayname, mxid, eventID string, ctx fo
 		return displayname
 	}
 	if mxid[0] == '#' {
-		alias, err := br.Bot.ResolveAlias(id.RoomAlias(mxid))
+		alias, err := br.Bot.ResolveAlias(context.Background(), id.RoomAlias(mxid))
 		if err != nil {
 			return displayname
 		}
@@ -262,7 +263,7 @@ func (portal *Portal) matrixUserDisplayName(mxid id.UserID) string {
 	if puppet := portal.bridge.GetPuppetByMXID(mxid); puppet != nil && puppet.Name != "" {
 		return puppet.Name
 	}
-	if member := portal.bridge.StateStore.GetMember(portal.MXID, mxid); member != nil && member.Displayname != "" {
+	if member, _ := portal.bridge.StateStore.GetMember(context.Background(), portal.MXID, mxid); member != nil && member.Displayname != "" {
 		return member.Displayname
 	}
 	return ""
@@ -421,7 +422,7 @@ func (portal *Portal) parseMatrixHTML(content *event.MessageEventContent, allowe
 	}
 	var out string
 	if content.Format == event.FormatHTML && len(content.FormattedBody) > 0 {
-		ctx := format.NewContext()
+		ctx := format.NewContext(context.Background())
 		ctx.ReturnData[formatterContextInputAllowedLinkPreviewsKey] = allowedLinkPreviews
 		ctx.ReturnData[formatterContextPortalKey] = portal
 		ctx.ReturnData[formatterContextAllowedMentionsKey] = allowedMentions

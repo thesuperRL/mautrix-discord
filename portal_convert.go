@@ -562,13 +562,13 @@ func (portal *Portal) convertDiscordLinkEmbedImage(ctx context.Context, intent *
 		return
 	}
 	if width != 0 || height != 0 {
-		preview.ImageWidth = width
-		preview.ImageHeight = height
+		preview.ImageWidth = event.IntOrString(width)
+		preview.ImageHeight = event.IntOrString(height)
 	} else {
-		preview.ImageWidth = dbFile.Width
-		preview.ImageHeight = dbFile.Height
+		preview.ImageWidth = event.IntOrString(dbFile.Width)
+		preview.ImageHeight = event.IntOrString(dbFile.Height)
 	}
-	preview.ImageSize = dbFile.Size
+	preview.ImageSize = event.IntOrString(dbFile.Size)
 	preview.ImageType = dbFile.MimeType
 	if dbFile.Encrypted {
 		preview.ImageEncryption = &event.EncryptedFileInfo{

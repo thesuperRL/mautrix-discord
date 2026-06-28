@@ -28,9 +28,9 @@ import (
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/appservice"
-	"maunium.net/go/mautrix/bridge"
-	"maunium.net/go/mautrix/bridge/bridgeconfig"
-	"maunium.net/go/mautrix/bridge/status"
+	"go.mau.fi/mautrix-discord/internal/bridge"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/status"
 	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
@@ -362,12 +362,12 @@ func (portal *Portal) UpdateBridgeInfo() {
 	}
 	portal.log.Debug().Msg("Updating bridge info...")
 	stateKey, content := portal.getBridgeInfo()
-	_, err := portal.MainIntent().SendStateEvent(portal.MXID, event.StateBridge, stateKey, content)
+	_, err := portal.MainIntent().SendStateEvent(context.Background(), portal.MXID, event.StateBridge, stateKey, content)
 	if err != nil {
 		portal.log.Warn().Err(err).Msg("Failed to update m.bridge")
 	}
 	// TODO remove this once https://github.com/matrix-org/matrix-doc/pull/2346 is in spec
-	_, err = portal.MainIntent().SendStateEvent(portal.MXID, event.StateHalfShotBridge, stateKey, content)
+	_, err = portal.MainIntent().SendStateEvent(context.Background(), portal.MXID, event.StateHalfShotBridge, stateKey, content)
 	if err != nil {
 		portal.log.Warn().Err(err).Msg("Failed to update uk.half-shot.bridge")
 	}
@@ -403,7 +403,7 @@ func (portal *Portal) CreateMatrixRoom(user *User, channel *discordgo.Channel) e
 	}
 
 	intent := portal.MainIntent()
-	if err := intent.EnsureRegistered(); err != nil {
+	if err := intent.EnsureRegistered(context.Background()); err != nil {
 		return err
 	}
 
@@ -439,7 +439,7 @@ func (portal *Portal) CreateMatrixRoom(user *User, channel *discordgo.Channel) e
 		initialState = append(initialState, &event.Event{
 			Type: event.StateRoomAvatar,
 			Content: event.Content{Parsed: &event.RoomAvatarEventContent{
-				URL: portal.AvatarURL,
+				URL: portal.AvatarURL.CUString(),
 			}},
 		})
 		portal.AvatarSet = true
@@ -504,7 +504,7 @@ func (portal *Portal) CreateMatrixRoom(user *User, channel *discordgo.Channel) e
 		}
 	}()
 
-	resp, err := intent.CreateRoom(req)
+	resp, err := intent.CreateRoom(context.Background(), req)
 	if err != nil {
 		portal.log.Warn().Err(err).Msg("Failed to create room")
 		return err
@@ -525,7 +525,7 @@ func (portal *Portal) CreateMatrixRoom(user *User, channel *discordgo.Channel) e
 	portal.log.Info().Msg("Matrix room created")
 
 	if portal.Encrypted && portal.IsPrivateChat() {
-		err = portal.bridge.Bot.EnsureJoined(portal.MXID, appservice.EnsureJoinedParams{BotOverride: portal.MainIntent().Client})
+		err = portal.bridge.Bot.EnsureJoined(context.Background(), portal.MXID, appservice.EnsureJoinedParams{BotOverride: portal.MainIntent().Client})
 		if err != nil {
 			portal.log.Err(err).Msg("Failed to ensure bridge bot is joined to encrypted private chat portal")
 		}
@@ -548,7 +548,7 @@ func (portal *Portal) CreateMatrixRoom(user *User, channel *discordgo.Channel) e
 		user.updateDirectChats(chats)
 	}
 
-	firstEventResp, err := portal.MainIntent().SendMessageEvent(portal.MXID, portalCreationDummyEvent, struct{}{})
+	firstEventResp, err := portal.MainIntent().SendMessageEvent(context.Background(), portal.MXID, portalCreationDummyEvent, struct{}{})
 	if err != nil {
 		portal.log.Err(err).Msg("Failed to send dummy event to mark portal creation")
 	} else {
@@ -794,7 +794,7 @@ func (portal *Portal) sendThreadCreationNotice(ctx context.Context, thread *Thre
 		Str("creation_notice_mxid", thread.CreationNoticeMXID.String()).
 		Msg("Sent thread creation notice")
 
-	resp, err = portal.MainIntent().SendMessageEvent(portal.MXID, event.EventReaction, &event.ReactionEventContent{
+	resp, err = portal.MainIntent().SendMessageEvent(context.Background(), portal.MXID, event.EventReaction, &event.ReactionEventContent{
 		RelatesTo: event.RelatesTo{
 			Type:    event.RelAnnotation,
 			EventID: thread.CreationNoticeMXID,
@@ -902,7 +902,7 @@ func (portal *Portal) handleDiscordMessageUpdate(user *User, msg *discordgo.Mess
 		}
 	}
 	for _, deletedAttachment := range attachmentMap {
-		resp, err := intent.RedactEvent(portal.MXID, deletedAttachment.MXID)
+		resp, err := intent.RedactEvent(context.Background(), portal.MXID, deletedAttachment.MXID)
 		if err != nil {
 			log.Err(err).
 				Str("event_id", deletedAttachment.MXID.String()).
@@ -986,7 +986,7 @@ func (portal *Portal) handleDiscordMessageDeleteBulk(user *User, messages []stri
 func (portal *Portal) redactAllParts(intent *appservice.IntentAPI, msgID string) (lastResp id.EventID) {
 	existing := portal.bridge.DB.Message.GetByDiscordID(portal.Key, msgID)
 	for _, dbMsg := range existing {
-		resp, err := intent.RedactEvent(portal.MXID, dbMsg.MXID)
+		resp, err := intent.RedactEvent(context.Background(), portal.MXID, dbMsg.MXID)
 		if err != nil {
 			portal.log.Err(err).
 				Str("message_id", msgID).
@@ -1011,12 +1011,12 @@ func (portal *Portal) handleDiscordTyping(evt *discordgo.TypingStart) {
 		Str("action", "discord typing").
 		Logger()
 	intent := puppet.IntentFor(portal)
-	err := intent.EnsureJoined(portal.MXID)
+	err := intent.EnsureJoined(context.Background(), portal.MXID)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to ensure ghost is joined for typing notification")
 		return
 	}
-	_, err = intent.UserTyping(portal.MXID, true, 12*time.Second)
+	_, err = intent.UserTyping(context.Background(), portal.MXID, true, 12*time.Second)
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to send typing notification to Matrix")
 	}
@@ -1037,12 +1037,12 @@ func (portal *Portal) syncParticipant(source *User, participant *discordgo.User,
 	}
 
 	if remove {
-		_, err := puppet.DefaultIntent().LeaveRoom(portal.MXID)
+		_, err := puppet.DefaultIntent().LeaveRoom(context.Background(), portal.MXID)
 		if err != nil {
 			log.Warn().Err(err).Msg("Failed to make ghost leave room after member remove event")
 		}
 	} else if user == nil || !puppet.IntentFor(portal).IsCustomPuppet {
-		if err := puppet.IntentFor(portal).EnsureJoined(portal.MXID); err != nil {
+		if err := puppet.IntentFor(portal).EnsureJoined(context.Background(), portal.MXID); err != nil {
 			log.Warn().Err(err).Msg("Failed to add ghost to room")
 		}
 	}
@@ -1062,7 +1062,7 @@ func (portal *Portal) syncParticipants(source *User, participants []*discordgo.U
 		}
 
 		if user == nil || !puppet.IntentFor(portal).IsCustomPuppet {
-			if err := puppet.IntentFor(portal).EnsureJoined(portal.MXID); err != nil {
+			if err := puppet.IntentFor(portal).EnsureJoined(context.Background(), portal.MXID); err != nil {
 				portal.log.Warn().Err(err).
 					Str("participant_id", participant.ID).
 					Msg("Failed to add ghost to room")
@@ -1094,11 +1094,11 @@ func (portal *Portal) sendMatrixMessage(intent *appservice.IntentAPI, eventType 
 		return nil, err
 	}
 
-	_, _ = intent.UserTyping(portal.MXID, false, 0)
+	_, _ = intent.UserTyping(context.Background(), portal.MXID, false, 0)
 	if timestamp == 0 {
-		return intent.SendMessageEvent(portal.MXID, eventType, &wrappedContent)
+		return intent.SendMessageEvent(context.Background(), portal.MXID, eventType, &wrappedContent)
 	} else {
-		return intent.SendMassagedMessageEvent(portal.MXID, eventType, &wrappedContent, timestamp)
+		return intent.SendMassagedMessageEvent(context.Background(), portal.MXID, eventType, &wrappedContent, timestamp)
 	}
 }
 
@@ -1126,7 +1126,7 @@ func generateNonce() string {
 }
 
 func (portal *Portal) getEvent(mxid id.EventID) (*event.Event, error) {
-	evt, err := portal.MainIntent().GetEvent(portal.MXID, mxid)
+	evt, err := portal.MainIntent().GetEvent(context.Background(), portal.MXID, mxid)
 	if err != nil {
 		return nil, err
 	}
@@ -1335,7 +1335,7 @@ func (portal *Portal) sendStatusEvent(evtID id.EventID, err error) {
 			content.Error = err.Error()
 		}
 	}
-	_, err = intent.SendMessageEvent(portal.MXID, event.BeeperMessageStatus, &content)
+	_, err = intent.SendMessageEvent(context.Background(), portal.MXID, event.BeeperMessageStatus, &content)
 	if err != nil {
 		portal.log.Err(err).Str("event_id", evtID.String()).Msg("Failed to send message status event")
 	}
@@ -1406,12 +1406,14 @@ func (br *DiscordBridge) serveMediaProxy(w http.ResponseWriter, r *http.Request)
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-	reader, err := br.Bot.Download(mxc)
+	resp, err := br.Bot.Download(context.Background(), mxc)
 	if err != nil {
 		br.ZLog.Warn().Err(err).Msg("Failed to download media to proxy")
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
+	defer resp.Body.Close()
+	reader := resp.Body
 	buf := make([]byte, 32*1024)
 	n, err := io.ReadFull(reader, buf)
 	if err != nil && (!errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF)) {
@@ -1449,7 +1451,7 @@ func (br *DiscordBridge) makeMediaProxyURL(mxc id.ContentURI) string {
 }
 
 func (portal *Portal) getRelayUserMeta(sender *User) (name, avatarURL string) {
-	member := portal.bridge.StateStore.GetMember(portal.MXID, sender.MXID)
+	member, _ := portal.bridge.StateStore.GetMember(context.Background(), portal.MXID, sender.MXID)
 	name = member.Displayname
 	if name == "" {
 		name = sender.MXID.String()
@@ -1501,7 +1503,7 @@ func (portal *Portal) convertReplyMessageToEmbed(eventID id.EventID, url string)
 		targetUser = fmt.Sprintf("<@%s>", puppet.ID)
 	} else if user := portal.bridge.GetUserByMXID(evt.Sender); user != nil && user.DiscordID != "" {
 		targetUser = fmt.Sprintf("<@%s>", user.DiscordID)
-	} else if member := portal.bridge.StateStore.GetMember(portal.MXID, evt.Sender); member != nil && member.Displayname != "" {
+	} else if member, _ := portal.bridge.StateStore.GetMember(context.Background(), portal.MXID, evt.Sender); member != nil && member.Displayname != "" {
 		targetUser = member.Displayname
 	} else {
 		targetUser = evt.Sender.String()
@@ -1720,7 +1722,7 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 			sendReq.AllowedMentions = nil
 		}
 	} else if strings.Contains(sendReq.Content, "@everyone") || strings.Contains(sendReq.Content, "@here") {
-		powerLevels, err := portal.MainIntent().PowerLevels(portal.MXID)
+		powerLevels, err := portal.MainIntent().PowerLevels(context.Background(), portal.MXID)
 		if err != nil {
 			portal.log.Warn().Err(err).
 				Str("user_id", sender.MXID.String()).
@@ -1792,7 +1794,7 @@ func parseAllowedLinkPreviews(raw map[string]any) []string {
 
 func (portal *Portal) sendDeliveryReceipt(eventID id.EventID) {
 	if portal.bridge.Config.Bridge.DeliveryReceipts {
-		err := portal.bridge.Bot.MarkRead(portal.MXID, eventID)
+		err := portal.bridge.Bot.MarkRead(context.Background(), portal.MXID, eventID)
 		if err != nil {
 			portal.log.Warn().Err(err).
 				Str("event_id", eventID.String()).
@@ -1872,7 +1874,7 @@ func (portal *Portal) cleanup(puppetsOnly bool) {
 	}
 	intent := portal.MainIntent()
 	if portal.bridge.SpecVersions.Supports(mautrix.BeeperFeatureRoomYeeting) {
-		err := intent.BeeperDeleteRoom(portal.MXID)
+		err := intent.BeeperDeleteRoom(context.Background(), portal.MXID)
 		if err != nil && !errors.Is(err, mautrix.MNotFound) {
 			portal.log.Err(err).Msg("Failed to delete room using hungryserv yeet endpoint")
 		}
@@ -1880,7 +1882,7 @@ func (portal *Portal) cleanup(puppetsOnly bool) {
 	}
 
 	if portal.IsPrivateChat() {
-		_, err := portal.MainIntent().LeaveRoom(portal.MXID)
+		_, err := portal.MainIntent().LeaveRoom(context.Background(), portal.MXID)
 		if err != nil {
 			portal.log.Warn().Err(err).Msg("Failed to leave private chat portal with main intent")
 		}
@@ -1891,7 +1893,7 @@ func (portal *Portal) cleanup(puppetsOnly bool) {
 }
 
 func (br *DiscordBridge) cleanupRoom(intent *appservice.IntentAPI, mxid id.RoomID, puppetsOnly bool, log zerolog.Logger) {
-	members, err := intent.JoinedMembers(mxid)
+	members, err := intent.JoinedMembers(context.Background(), mxid)
 	if err != nil {
 		log.Err(err).Msg("Failed to get portal members for cleanup")
 		return
@@ -1904,26 +1906,26 @@ func (br *DiscordBridge) cleanupRoom(intent *appservice.IntentAPI, mxid id.RoomI
 
 		puppet := br.GetPuppetByMXID(member)
 		if puppet != nil {
-			_, err = puppet.DefaultIntent().LeaveRoom(mxid)
+			_, err = puppet.DefaultIntent().LeaveRoom(context.Background(), mxid)
 			if err != nil {
 				log.Err(err).Msg("Error leaving as puppet while cleaning up portal")
 			}
 		} else if !puppetsOnly {
-			_, err = intent.KickUser(mxid, &mautrix.ReqKickUser{UserID: member, Reason: "Deleting portal"})
+			_, err = intent.KickUser(context.Background(), mxid, &mautrix.ReqKickUser{UserID: member, Reason: "Deleting portal"})
 			if err != nil {
 				log.Err(err).Msg("Error kicking user while cleaning up portal")
 			}
 		}
 	}
 
-	_, err = intent.LeaveRoom(mxid)
+	_, err = intent.LeaveRoom(context.Background(), mxid)
 	if err != nil {
 		log.Err(err).Msg("Error leaving with main intent while cleaning up portal")
 	}
 }
 
 func (portal *Portal) getMatrixUsers() ([]id.UserID, error) {
-	members, err := portal.MainIntent().JoinedMembers(portal.MXID)
+	members, err := portal.MainIntent().JoinedMembers(context.Background(), portal.MXID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get member list: %w", err)
 	}
@@ -2069,7 +2071,7 @@ func (portal *Portal) handleDiscordReaction(user *User, reaction *discordgo.Mess
 			return
 		}
 
-		resp, err := intent.RedactEvent(portal.MXID, existing.MXID)
+		resp, err := intent.RedactEvent(context.Background(), portal.MXID, existing.MXID)
 		if err != nil {
 			log.Err(err).Msg("Failed to remove reaction")
 		} else {
@@ -2105,7 +2107,7 @@ func (portal *Portal) handleDiscordReaction(user *User, reaction *discordgo.Mess
 		}
 	}
 
-	resp, err := intent.SendMessageEvent(portal.MXID, event.EventReaction, &event.Content{
+	resp, err := intent.SendMessageEvent(context.Background(), portal.MXID, event.EventReaction, &event.Content{
 		Parsed: &content,
 		Raw:    extraContent,
 	})
@@ -2169,7 +2171,7 @@ func (portal *Portal) handleMatrixRedaction(sender *User, evt *event.Event) {
 	if sess != nil {
 		reaction := portal.bridge.DB.Reaction.GetByMXID(evt.Redacts)
 		if reaction != nil && reaction.Channel == portal.Key {
-			redactedEvt, err := portal.MainIntent().GetEvent(portal.MXID, evt.Redacts)
+			redactedEvt, err := portal.MainIntent().GetEvent(context.Background(), portal.MXID, evt.Redacts)
 			if err == nil && redactedEvt != nil && portal.isMatrixReactionCrossBridge(redactedEvt) {
 				if msg := portal.bridge.DB.Message.GetFirstByDiscordID(portal.Key, reaction.MessageID); msg != nil {
 					portal.scheduleReactionMirrorRefresh(msg)
@@ -2334,7 +2336,7 @@ func (portal *Portal) UpdateNameDirect(name string, isFriendNick bool) bool {
 
 func (portal *Portal) updateRoomName() {
 	if portal.MXID != "" && (portal.shouldSetDMRoomMetadata() || portal.FriendNick) {
-		_, err := portal.MainIntent().SetRoomName(portal.MXID, portal.Name)
+		_, err := portal.MainIntent().SetRoomName(context.Background(), portal.MXID, portal.Name)
 		if err != nil {
 			portal.log.Err(err).Msg("Failed to update room name")
 		} else {
@@ -2388,7 +2390,7 @@ func (portal *Portal) updateRoomAvatar() {
 	if portal.MXID == "" || portal.AvatarURL.IsEmpty() || !portal.shouldSetDMRoomMetadata() {
 		return
 	}
-	_, err := portal.MainIntent().SetRoomAvatar(portal.MXID, portal.AvatarURL)
+	_, err := portal.MainIntent().SetRoomAvatar(context.Background(), portal.MXID, portal.AvatarURL)
 	if err != nil {
 		portal.log.Err(err).Msg("Failed to update room avatar")
 	} else {
@@ -2415,7 +2417,7 @@ func (portal *Portal) UpdateTopic(topic string) bool {
 
 func (portal *Portal) updateRoomTopic() {
 	if portal.MXID != "" {
-		_, err := portal.MainIntent().SetRoomTopic(portal.MXID, portal.Topic)
+		_, err := portal.MainIntent().SetRoomTopic(context.Background(), portal.MXID, portal.Topic)
 		if err != nil {
 			portal.log.Err(err).Msg("Failed to update room topic")
 		} else {
@@ -2431,11 +2433,11 @@ func (portal *Portal) removeFromSpace() {
 
 	log := portal.log.With().Str("space_mxid", portal.InSpace.String()).Logger()
 	log.Debug().Msg("Removing room from space")
-	_, err := portal.MainIntent().SendStateEvent(portal.MXID, event.StateSpaceParent, portal.InSpace.String(), struct{}{})
+	_, err := portal.MainIntent().SendStateEvent(context.Background(), portal.MXID, event.StateSpaceParent, portal.InSpace.String(), struct{}{})
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to clear m.space.parent event in room")
 	}
-	_, err = portal.bridge.Bot.SendStateEvent(portal.InSpace, event.StateSpaceChild, portal.MXID.String(), struct{}{})
+	_, err = portal.bridge.Bot.SendStateEvent(context.Background(), portal.InSpace, event.StateSpaceChild, portal.MXID.String(), struct{}{})
 	if err != nil {
 		log.Warn().Err(err).Msg("Failed to clear m.space.child event in space")
 	}
@@ -2452,7 +2454,7 @@ func (portal *Portal) addToSpace(mxid id.RoomID) bool {
 	}
 
 	log := portal.log.With().Str("space_mxid", mxid.String()).Logger()
-	_, err := portal.MainIntent().SendStateEvent(portal.MXID, event.StateSpaceParent, mxid.String(), &event.SpaceParentEventContent{
+	_, err := portal.MainIntent().SendStateEvent(context.Background(), portal.MXID, event.StateSpaceParent, mxid.String(), &event.SpaceParentEventContent{
 		Via:       []string{portal.bridge.AS.HomeserverDomain},
 		Canonical: true,
 	})
@@ -2460,7 +2462,7 @@ func (portal *Portal) addToSpace(mxid id.RoomID) bool {
 		log.Warn().Err(err).Msg("Failed to set m.space.parent event in room")
 	}
 
-	_, err = portal.bridge.Bot.SendStateEvent(mxid, event.StateSpaceChild, portal.MXID.String(), &event.SpaceChildEventContent{
+	_, err = portal.bridge.Bot.SendStateEvent(context.Background(), mxid, event.StateSpaceChild, portal.MXID.String(), &event.SpaceChildEventContent{
 		Via: []string{portal.bridge.AS.HomeserverDomain},
 		// TODO order
 	})
@@ -2610,7 +2612,7 @@ func (portal *Portal) UpdateInfo(source *User, meta *discordgo.Channel) *discord
 	return meta
 }
 
-func (br *DiscordBridge) HandleTombstone(evt *event.Event) {
+func (br *DiscordBridge) HandleTombstone(_ context.Context, evt *event.Event) {
 	if evt.StateKey == nil || *evt.StateKey != "" {
 		return
 	}
@@ -2634,18 +2636,20 @@ func (br *DiscordBridge) HandleTombstone(evt *event.Event) {
 		return
 	}
 	logEvt.Msg("Received tombstone event, joining new room")
-	_, err := br.Bot.JoinRoom(content.ReplacementRoom.String(), evt.Sender.Homeserver(), nil)
+	_, err := br.Bot.JoinRoom(context.Background(), content.ReplacementRoom.String(), &mautrix.ReqJoinRoom{
+		Via: []string{evt.Sender.Homeserver()},
+	})
 	if err != nil {
 		portal.log.Err(err).Msg("Failed to join replacement room")
 		return
 	}
-	_, err = br.Bot.State(content.ReplacementRoom)
+	_, err = br.Bot.State(context.Background(), content.ReplacementRoom)
 	if err != nil {
 		portal.log.Err(err).Msg("Failed to get state of replacement room")
 		return
 	}
 
-	encrypted := br.AS.StateStore.IsEncrypted(portal.MXID)
+	encrypted, _ := br.AS.StateStore.IsEncrypted(context.Background(), portal.MXID)
 	br.portalsLock.Lock()
 	defer br.portalsLock.Unlock()
 	if portal.MXID != evt.RoomID {

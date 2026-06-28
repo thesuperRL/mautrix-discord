@@ -19,11 +19,11 @@ package config
 import (
 	up "go.mau.fi/util/configupgrade"
 	"go.mau.fi/util/random"
-	"maunium.net/go/mautrix/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
 	"maunium.net/go/mautrix/federation"
 )
 
-func DoUpgrade(helper *up.Helper) {
+func DoUpgrade(helper up.Helper) {
 	bridgeconfig.Upgrader.DoUpgrade(helper)
 
 	helper.Copy(up.Str, "bridge", "username_template")

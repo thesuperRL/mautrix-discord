@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -36,11 +37,11 @@ func (rq *RoleQuery) New() *Role {
 
 func (rq *RoleQuery) GetByID(guildID, dcid string) *Role {
 	query := roleSelect + " WHERE dc_guild_id=$1 AND dcid=$2"
-	return rq.New().Scan(rq.db.QueryRow(query, guildID, dcid))
+	return rq.New().Scan(rq.db.QueryRow(context.Background(), query, guildID, dcid))
 }
 
 func (rq *RoleQuery) DeleteByID(guildID, dcid string) {
-	_, err := rq.db.Exec("DELETE FROM role WHERE dc_guild_id=$1 AND dcid=$2", guildID, dcid)
+	_, err := rq.db.Exec(context.Background(), "DELETE FROM role WHERE dc_guild_id=$1 AND dcid=$2", guildID, dcid)
 	if err != nil {
 		rq.log.Warnfln("Failed to delete %s/%s: %v", guildID, dcid, err)
 		panic(err)
@@ -48,7 +49,7 @@ func (rq *RoleQuery) DeleteByID(guildID, dcid string) {
 }
 
 func (rq *RoleQuery) GetAll(guildID string) []*Role {
-	rows, err := rq.db.Query(roleSelect+" WHERE dc_guild_id=$1", guildID)
+	rows, err := rq.db.Query(context.Background(), roleSelect+" WHERE dc_guild_id=$1", guildID)
 	if err != nil {
 		rq.log.Errorfln("Failed to query roles of %s: %v", guildID, err)
 		return nil
@@ -90,10 +91,13 @@ func (r *Role) Scan(row dbutil.Scannable) *Role {
 }
 
 func (r *Role) Upsert(txn dbutil.Execable) {
+	ctx := context.Background()
+	var err error
 	if txn == nil {
-		txn = r.db
+		_, err = r.db.Exec(ctx, roleUpsert, r.GuildID, r.ID, r.Name, strPtr(r.Icon), r.Mentionable, r.Managed, r.Hoist, r.Color, r.Position, r.Permissions)
+	} else {
+		_, err = txn.ExecContext(ctx, roleUpsert, r.GuildID, r.ID, r.Name, strPtr(r.Icon), r.Mentionable, r.Managed, r.Hoist, r.Color, r.Position, r.Permissions)
 	}
-	_, err := txn.Exec(roleUpsert, r.GuildID, r.ID, r.Name, strPtr(r.Icon), r.Mentionable, r.Managed, r.Hoist, r.Color, r.Position, r.Permissions)
 	if err != nil {
 		r.log.Warnfln("Failed to insert %s/%s: %v", r.GuildID, r.ID, err)
 		panic(err)
@@ -101,10 +105,13 @@ func (r *Role) Upsert(txn dbutil.Execable) {
 }
 
 func (r *Role) Delete(txn dbutil.Execable) {
+	ctx := context.Background()
+	var err error
 	if txn == nil {
-		txn = r.db
+		_, err = r.db.Exec(ctx, roleDelete, r.GuildID, r.Icon)
+	} else {
+		_, err = txn.ExecContext(ctx, roleDelete, r.GuildID, r.Icon)
 	}
-	_, err := txn.Exec(roleDelete, r.GuildID, r.Icon)
 	if err != nil {
 		r.log.Warnfln("Failed to delete %s/%s: %v", r.GuildID, r.ID, err)
 		panic(err)

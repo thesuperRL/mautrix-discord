@@ -25,7 +25,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/shlex"
 
-	"maunium.net/go/mautrix/bridge/commands"
+	"go.mau.fi/mautrix-discord/internal/bridge/commands"
 )
 
 var HelpSectionDiscordBots = commands.HelpSection{Name: "Discord bot interaction", Order: 30}

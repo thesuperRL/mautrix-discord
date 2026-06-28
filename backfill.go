@@ -221,7 +221,7 @@ func (portal *Portal) forwardBatchSend(log zerolog.Logger, source *User, message
 		return
 	}
 	log.Info().Int("events", len(evts)).Msg("Converted messages to backfill")
-	resp, err := portal.MainIntent().BeeperBatchSend(portal.MXID, &mautrix.ReqBeeperBatchSend{
+	resp, err := portal.MainIntent().BeeperBatchSend(context.Background(), portal.MXID, &mautrix.ReqBeeperBatchSend{
 		Forward: true,
 		Events:  evts,
 	})

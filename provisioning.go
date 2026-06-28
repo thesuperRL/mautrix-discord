@@ -16,7 +16,7 @@ import (
 	log "maunium.net/go/maulogger/v2"
 
 	"maunium.net/go/mautrix"
-	"maunium.net/go/mautrix/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
 	"maunium.net/go/mautrix/id"
 
 	"go.mau.fi/mautrix-discord/database"
@@ -57,26 +57,28 @@ func newProvisioningAPI(br *DiscordBridge) *ProvisioningAPI {
 
 	p.log.Debugln("Enabling provisioning API at", prefix)
 
-	r := br.AS.Router.PathPrefix(prefix).Subrouter()
+	provisioningRouter := mux.NewRouter().PathPrefix(prefix).Subrouter()
+	br.AS.Router.Handle(prefix+"/", provisioningRouter)
 
-	r.Use(p.authMiddleware)
+	provisioningRouter.Use(p.authMiddleware)
 
-	r.HandleFunc("/v1/disconnect", p.disconnect).Methods(http.MethodPost)
-	r.HandleFunc("/v1/ping", p.ping).Methods(http.MethodGet)
-	r.HandleFunc("/v1/login/qr", p.qrLogin).Methods(http.MethodGet)
-	r.HandleFunc("/v1/login/token", p.tokenLogin).Methods(http.MethodPost)
-	r.HandleFunc("/v1/logout", p.logout).Methods(http.MethodPost)
-	r.HandleFunc("/v1/reconnect", p.reconnect).Methods(http.MethodPost)
+	provisioningRouter.HandleFunc("/v1/disconnect", p.disconnect).Methods(http.MethodPost)
+	provisioningRouter.HandleFunc("/v1/ping", p.ping).Methods(http.MethodGet)
+	provisioningRouter.HandleFunc("/v1/login/qr", p.qrLogin).Methods(http.MethodGet)
+	provisioningRouter.HandleFunc("/v1/login/token", p.tokenLogin).Methods(http.MethodPost)
+	provisioningRouter.HandleFunc("/v1/logout", p.logout).Methods(http.MethodPost)
+	provisioningRouter.HandleFunc("/v1/reconnect", p.reconnect).Methods(http.MethodPost)
 
-	r.HandleFunc("/v1/guilds", p.guildsList).Methods(http.MethodGet)
-	r.HandleFunc("/v1/guilds/{guildID}", p.guildsBridge).Methods(http.MethodPost)
-	r.HandleFunc("/v1/guilds/{guildID}", p.guildsUnbridge).Methods(http.MethodDelete)
+	provisioningRouter.HandleFunc("/v1/guilds", p.guildsList).Methods(http.MethodGet)
+	provisioningRouter.HandleFunc("/v1/guilds/{guildID}", p.guildsBridge).Methods(http.MethodPost)
+	provisioningRouter.HandleFunc("/v1/guilds/{guildID}", p.guildsUnbridge).Methods(http.MethodDelete)
 
 	if p.bridge.Config.Bridge.Provisioning.DebugEndpoints {
 		p.log.Debugln("Enabling debug API at /debug")
-		r := p.bridge.AS.Router.PathPrefix("/debug").Subrouter()
-		r.Use(p.authMiddleware)
-		r.PathPrefix("/pprof").Handler(http.DefaultServeMux)
+		debugRouter := mux.NewRouter().PathPrefix("/debug").Subrouter()
+		br.AS.Router.Handle("/debug/", debugRouter)
+		debugRouter.Use(p.authMiddleware)
+		debugRouter.PathPrefix("/pprof").Handler(http.DefaultServeMux)
 	}
 
 	return p

@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -28,7 +29,7 @@ func (tq *ThreadQuery) New() *Thread {
 func (tq *ThreadQuery) GetByDiscordID(discordID string) *Thread {
 	query := threadSelect + " WHERE dcid=$1"
 
-	row := tq.db.QueryRow(query, discordID)
+	row := tq.db.QueryRow(context.Background(), query, discordID)
 	if row == nil {
 		return nil
 	}
@@ -39,7 +40,7 @@ func (tq *ThreadQuery) GetByDiscordID(discordID string) *Thread {
 func (tq *ThreadQuery) GetByMatrixRootMsg(mxid id.EventID) *Thread {
 	query := threadSelect + " WHERE root_msg_mxid=$1"
 
-	row := tq.db.QueryRow(query, mxid)
+	row := tq.db.QueryRow(context.Background(), query, mxid)
 	if row == nil {
 		return nil
 	}
@@ -50,7 +51,7 @@ func (tq *ThreadQuery) GetByMatrixRootMsg(mxid id.EventID) *Thread {
 func (tq *ThreadQuery) GetByMatrixRootOrCreationNoticeMsg(mxid id.EventID) *Thread {
 	query := threadSelect + " WHERE root_msg_mxid=$1 OR creation_notice_mxid=$1"
 
-	row := tq.db.QueryRow(query, mxid)
+	row := tq.db.QueryRow(context.Background(), query, mxid)
 	if row == nil {
 		return nil
 	}
@@ -85,7 +86,7 @@ func (t *Thread) Scan(row dbutil.Scannable) *Thread {
 
 func (t *Thread) Insert() {
 	query := "INSERT INTO thread (dcid, parent_chan_id, root_msg_dcid, root_msg_mxid, creation_notice_mxid) VALUES ($1, $2, $3, $4, $5)"
-	_, err := t.db.Exec(query, t.ID, t.ParentID, t.RootDiscordID, t.RootMXID, t.CreationNoticeMXID)
+	_, err := t.db.Exec(context.Background(), query, t.ID, t.ParentID, t.RootDiscordID, t.RootMXID, t.CreationNoticeMXID)
 	if err != nil {
 		t.log.Warnfln("Failed to insert %s@%s: %v", t.ID, t.ParentID, err)
 		panic(err)
@@ -94,7 +95,7 @@ func (t *Thread) Insert() {
 
 func (t *Thread) Update() {
 	query := "UPDATE thread SET creation_notice_mxid=$2 WHERE dcid=$1"
-	_, err := t.db.Exec(query, t.ID, t.CreationNoticeMXID)
+	_, err := t.db.Exec(context.Background(), query, t.ID, t.CreationNoticeMXID)
 	if err != nil {
 		t.log.Warnfln("Failed to update %s@%s: %v", t.ID, t.ParentID, err)
 		panic(err)
@@ -103,7 +104,7 @@ func (t *Thread) Update() {
 
 func (t *Thread) Delete() {
 	query := "DELETE FROM thread WHERE dcid=$1 AND parent_chan_id=$2"
-	_, err := t.db.Exec(query, t.ID, t.ParentID)
+	_, err := t.db.Exec(context.Background(), query, t.ID, t.ParentID)
 	if err != nil {
 		t.log.Warnfln("Failed to delete %s@%s: %v", t.ID, t.ParentID, err)
 		panic(err)

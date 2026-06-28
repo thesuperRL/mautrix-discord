@@ -24,7 +24,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 
-	"maunium.net/go/mautrix/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
 )
 
 type BridgeConfig struct {

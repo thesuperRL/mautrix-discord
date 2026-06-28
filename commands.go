@@ -32,8 +32,8 @@ import (
 
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/appservice"
-	"maunium.net/go/mautrix/bridge/bridgeconfig"
-	"maunium.net/go/mautrix/bridge/commands"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/commands"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
@@ -208,7 +208,7 @@ func fnLoginQR(ce *WrappedCommandEvent) {
 	<-doneChan
 
 	if qrCodeEvent != "" {
-		_, _ = ce.MainIntent().RedactEvent(ce.RoomID, qrCodeEvent)
+		_, _ = ce.MainIntent().RedactEvent(context.Background(), ce.RoomID, qrCodeEvent)
 	}
 
 	user, err := client.Result()
@@ -245,7 +245,7 @@ func sendQRCode(ce *WrappedCommandEvent, code string) id.EventID {
 		URL:      url.CUString(),
 	}
 
-	resp, err := ce.Bot.SendMessageEvent(ce.RoomID, event.EventMessage, &content)
+	resp, err := ce.Bot.SendMessageEvent(context.Background(), ce.RoomID, event.EventMessage, &content)
 	if err != nil {
 		ce.Log.Errorfln("Failed to send QR code: %v", err)
 		return ""
@@ -262,7 +262,7 @@ func uploadQRCode(ce *WrappedCommandEvent, code string) (id.ContentURI, bool) {
 		return id.ContentURI{}, false
 	}
 
-	resp, err := ce.Bot.UploadBytes(qrCode, "image/png")
+	resp, err := ce.Bot.UploadBytes(context.Background(), qrCode, "image/png")
 	if err != nil {
 		ce.Log.Errorln("Failed to upload QR code:", err)
 		ce.Reply("Failed to upload QR code: %v", err)
@@ -413,7 +413,7 @@ func fnSetRelay(ce *WrappedCommandEvent) {
 			return
 		}
 		if ce.User.PermissionLevel < bridgeconfig.PermissionLevelAdmin {
-			levels, err := portal.MainIntent().PowerLevels(ce.RoomID)
+			levels, err := portal.MainIntent().PowerLevels(context.Background(), ce.RoomID)
 			if err != nil {
 				ce.ZLog.Warn().Err(err).Msg("Failed to check room power levels")
 				ce.Reply("Failed to get room power levels to see if you're allowed to use that command")
@@ -722,7 +722,7 @@ func fnBridge(ce *WrappedCommandEvent) {
 	if portal.MXID != "" {
 		hasUnbridgePermission := ce.User.PermissionLevel >= bridgeconfig.PermissionLevelAdmin
 		if !hasUnbridgePermission {
-			levels, err := portal.MainIntent().PowerLevels(portal.MXID)
+			levels, err := portal.MainIntent().PowerLevels(context.Background(), portal.MXID)
 			if errors.Is(err, mautrix.MNotFound) {
 				ce.ZLog.Debug().Err(err).Msg("Got M_NOT_FOUND trying to get power levels to check if user can unbridge it, assuming the room is gone")
 				hasUnbridgePermission = true
@@ -769,7 +769,7 @@ func fnBridge(ce *WrappedCommandEvent) {
 	portal.updateRoomTopic()
 	portal.updateSpace(ce.User)
 	portal.UpdateBridgeInfo()
-	state, err := portal.MainIntent().State(portal.MXID)
+	state, err := portal.MainIntent().State(context.Background(), portal.MXID)
 	if err != nil {
 		ce.ZLog.Error().Err(err).Msg("Failed to update state cache for room")
 	} else {
@@ -873,7 +873,7 @@ func fnDeleteAllPortals(ce *WrappedCommandEvent) {
 
 	leave := func(mxid id.RoomID, intent *appservice.IntentAPI) {
 		if len(mxid) > 0 {
-			_, _ = intent.KickUser(mxid, &mautrix.ReqKickUser{
+			_, _ = intent.KickUser(context.Background(), mxid, &mautrix.ReqKickUser{
 				Reason: "Deleting portal",
 				UserID: ce.User.MXID,
 			})
@@ -884,8 +884,8 @@ func fnDeleteAllPortals(ce *WrappedCommandEvent) {
 		intent := customPuppet.CustomIntent()
 		leave = func(mxid id.RoomID, _ *appservice.IntentAPI) {
 			if len(mxid) > 0 {
-				_, _ = intent.LeaveRoom(mxid)
-				_, _ = intent.ForgetRoom(mxid)
+				_, _ = intent.LeaveRoom(context.Background(), mxid)
+				_, _ = intent.ForgetRoom(context.Background(), mxid)
 			}
 		}
 	}

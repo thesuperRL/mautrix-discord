@@ -19,13 +19,15 @@ package main
 import (
 	_ "embed"
 	"net/http"
+
+	"github.com/gorilla/mux"
 	"sync"
 
 	"go.mau.fi/util/configupgrade"
 	"go.mau.fi/util/exsync"
 	"golang.org/x/sync/semaphore"
-	"maunium.net/go/mautrix/bridge"
-	"maunium.net/go/mautrix/bridge/commands"
+	"go.mau.fi/mautrix-discord/internal/bridge"
+	"go.mau.fi/mautrix-discord/internal/bridge/commands"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
@@ -110,7 +112,9 @@ func (br *DiscordBridge) Start() {
 		br.provisioning = newProvisioningAPI(br)
 	}
 	if br.Config.Bridge.PublicAddress != "" {
-		br.AS.Router.HandleFunc("/mautrix-discord/avatar/{server}/{mediaID}/{checksum}", br.serveMediaProxy).Methods(http.MethodGet)
+		avatarRouter := mux.NewRouter().PathPrefix("/mautrix-discord/avatar").Subrouter()
+		br.AS.Router.Handle("/mautrix-discord/avatar/", avatarRouter)
+		avatarRouter.HandleFunc("/{server}/{mediaID}/{checksum}", br.serveMediaProxy).Methods(http.MethodGet)
 	}
 	br.DMA = newDirectMediaAPI(br)
 	br.WaitWebsocketConnected()

@@ -105,7 +105,7 @@ func downloadMatrixAttachment(intent *appservice.IntentAPI, content *event.Messa
 		return nil, err
 	}
 
-	data, err := intent.DownloadBytes(mxc)
+	data, err := intent.DownloadBytes(context.Background(), mxc)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +149,7 @@ func (br *DiscordBridge) uploadMatrixAttachment(intent *appservice.IntentAPI, da
 		ContentType:  uploadMime,
 	}
 	if br.Config.Homeserver.AsyncMedia {
-		resp, err := intent.CreateMXC()
+		resp, err := intent.CreateMXC(context.Background(), )
 		if err != nil {
 			return nil, err
 		}
@@ -159,14 +159,14 @@ func (br *DiscordBridge) uploadMatrixAttachment(intent *appservice.IntentAPI, da
 		semaWg.Add(1)
 		go func() {
 			defer semaWg.Done()
-			_, err = intent.UploadMedia(req)
+			_, err = intent.UploadMedia(context.Background(), req)
 			if err != nil {
 				br.Log.Errorfln("Failed to upload %s: %v", req.MXC, err)
 				dbFile.Delete()
 			}
 		}()
 	} else {
-		uploaded, err := intent.UploadMedia(req)
+		uploaded, err := intent.UploadMedia(context.Background(), req)
 		if err != nil {
 			return nil, err
 		}

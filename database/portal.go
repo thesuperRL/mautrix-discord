@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 
 	"github.com/bwmarrin/discordgo"
@@ -81,7 +82,7 @@ func (pq *PortalQuery) FindPrivateChatsOf(receiver string) []*Portal {
 }
 
 func (pq *PortalQuery) getAll(query string, args ...interface{}) []*Portal {
-	rows, err := pq.db.Query(query, args...)
+	rows, err := pq.db.Query(context.Background(), query, args...)
 	if err != nil || rows == nil {
 		return nil
 	}
@@ -96,7 +97,7 @@ func (pq *PortalQuery) getAll(query string, args ...interface{}) []*Portal {
 }
 
 func (pq *PortalQuery) get(query string, args ...interface{}) *Portal {
-	return pq.New().Scan(pq.db.QueryRow(query, args...))
+	return pq.New().Scan(pq.db.QueryRow(context.Background(), query, args...))
 }
 
 type Portal struct {
@@ -167,7 +168,7 @@ func (p *Portal) Insert() {
 		                    encrypted, in_space, first_event_id, relay_webhook_id, relay_webhook_secret)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 	`
-	_, err := p.db.Exec(query, p.Key.ChannelID, p.Key.Receiver, p.Type,
+	_, err := p.db.Exec(context.Background(), query, p.Key.ChannelID, p.Key.Receiver, p.Type,
 		strPtr(p.OtherUserID), strPtr(p.GuildID), strPtr(p.ParentID), strPtr(string(p.MXID)),
 		p.PlainName, p.Name, p.NameSet, p.FriendNick, p.Topic, p.TopicSet, p.Avatar, p.AvatarURL.String(), p.AvatarSet,
 		p.Encrypted, p.InSpace, p.FirstEventID.String(), strPtr(p.RelayWebhookID), strPtr(p.RelayWebhookSecret))
@@ -187,7 +188,7 @@ func (p *Portal) Update() {
 			relay_webhook_id=$18, relay_webhook_secret=$19
 		WHERE dcid=$20 AND receiver=$21
 	`
-	_, err := p.db.Exec(query,
+	_, err := p.db.Exec(context.Background(), query,
 		p.Type, strPtr(p.OtherUserID), strPtr(p.GuildID), strPtr(p.ParentID), strPtr(string(p.MXID)),
 		p.PlainName, p.Name, p.NameSet, p.FriendNick, p.Topic, p.TopicSet,
 		p.Avatar, p.AvatarURL.String(), p.AvatarSet, p.Encrypted, p.InSpace, p.FirstEventID.String(),
@@ -202,7 +203,7 @@ func (p *Portal) Update() {
 
 func (p *Portal) Delete() {
 	query := "DELETE FROM portal WHERE dcid=$1 AND receiver=$2"
-	_, err := p.db.Exec(query, p.Key.ChannelID, p.Key.Receiver)
+	_, err := p.db.Exec(context.Background(), query, p.Key.ChannelID, p.Key.Receiver)
 	if err != nil {
 		p.log.Warnfln("Failed to delete %s: %v", p.Key, err)
 		panic(err)

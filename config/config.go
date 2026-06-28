@@ -17,7 +17,7 @@
 package config
 
 import (
-	"maunium.net/go/mautrix/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
 	"maunium.net/go/mautrix/id"
 )
 

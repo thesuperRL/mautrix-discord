@@ -89,8 +89,6 @@ func newDirectMediaAPI(br *DiscordBridge) *DirectMediaAPI {
 		},
 		attachmentCache: make(map[AttachmentCacheKey]AttachmentCacheValue),
 	}
-	r := br.AS.Router
-
 	parsed, err := federation.ParseSynapseKey(dma.cfg.ServerKey)
 	if err != nil {
 		dma.log.WithLevel(zerolog.FatalLevel).Err(err).Msg("Failed to parse server key")
@@ -112,9 +110,12 @@ func newDirectMediaAPI(br *DiscordBridge) *DirectMediaAPI {
 	if dma.ks.WellKnownTarget == "" {
 		dma.ks.WellKnownTarget = fmt.Sprintf("%s:443", dma.cfg.ServerName)
 	}
-	federationRouter := r.PathPrefix("/_matrix/federation").Subrouter()
-	mediaRouter := r.PathPrefix("/_matrix/media").Subrouter()
-	clientMediaRouter := r.PathPrefix("/_matrix/client/v1/media").Subrouter()
+	federationRouter := mux.NewRouter().PathPrefix("/_matrix/federation").Subrouter()
+	mediaRouter := mux.NewRouter().PathPrefix("/_matrix/media").Subrouter()
+	clientMediaRouter := mux.NewRouter().PathPrefix("/_matrix/client/v1/media").Subrouter()
+	br.AS.Router.Handle("/_matrix/federation/", federationRouter)
+	br.AS.Router.Handle("/_matrix/media/", mediaRouter)
+	br.AS.Router.Handle("/_matrix/client/v1/media/", clientMediaRouter)
 	var reqIDCounter atomic.Uint64
 	middleware := func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -160,7 +161,7 @@ func newDirectMediaAPI(br *DiscordBridge) *DirectMediaAPI {
 	mediaRouter.MethodNotAllowedHandler = http.HandlerFunc(dma.UnsupportedMethod)
 	federationRouter.NotFoundHandler = http.HandlerFunc(dma.UnknownEndpoint)
 	federationRouter.MethodNotAllowedHandler = http.HandlerFunc(dma.UnsupportedMethod)
-	dma.ks.Register(r)
+	dma.ks.Register(br.AS.Router, dma.log)
 
 	return dma
 }

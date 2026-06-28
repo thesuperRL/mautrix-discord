@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -17,7 +18,7 @@ type ReactionMirrorQuery struct {
 const reactionMirrorSelect = `SELECT dc_chan_id, dc_chan_receiver, dc_msg_id, target_mxid, mirrored_emoji, summary_thread_id, summary_message_id FROM reaction_mirror_state`
 
 func (q *ReactionMirrorQuery) GetByMessage(key PortalKey, messageID string) *ReactionMirrorState {
-	row := q.db.QueryRow(reactionMirrorSelect+` WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND dc_msg_id=$3`, key.ChannelID, key.Receiver, messageID)
+	row := q.db.QueryRow(context.Background(), reactionMirrorSelect+` WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND dc_msg_id=$3`, key.ChannelID, key.Receiver, messageID)
 	if row == nil {
 		return nil
 	}
@@ -28,7 +29,7 @@ func (q *ReactionMirrorQuery) IsMirrorThread(key PortalKey, threadID string) boo
 	if threadID == "" {
 		return false
 	}
-	row := q.db.QueryRow(`SELECT 1 FROM reaction_mirror_state WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND summary_thread_id=$3 LIMIT 1`, key.ChannelID, key.Receiver, threadID)
+	row := q.db.QueryRow(context.Background(), `SELECT 1 FROM reaction_mirror_state WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND summary_thread_id=$3 LIMIT 1`, key.ChannelID, key.Receiver, threadID)
 	var one int
 	if err := row.Scan(&one); err != nil {
 		return false
@@ -67,7 +68,7 @@ func (s *ReactionMirrorState) Scan(row dbutil.Scannable) *ReactionMirrorState {
 }
 
 func (s *ReactionMirrorState) Upsert() {
-	_, err := s.db.Exec(`
+	_, err := s.db.Exec(context.Background(), `
 		INSERT INTO reaction_mirror_state (dc_chan_id, dc_chan_receiver, dc_msg_id, target_mxid, mirrored_emoji, summary_thread_id, summary_message_id)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		ON CONFLICT (dc_chan_id, dc_chan_receiver, dc_msg_id) DO UPDATE SET

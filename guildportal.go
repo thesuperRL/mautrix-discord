@@ -17,6 +17,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -150,12 +151,12 @@ func (guild *Guild) UpdateBridgeInfo() {
 	}
 	guild.log.Debugln("Updating bridge info...")
 	stateKey, content := guild.getBridgeInfo()
-	_, err := guild.bridge.Bot.SendStateEvent(guild.MXID, event.StateBridge, stateKey, content)
+	_, err := guild.bridge.Bot.SendStateEvent(context.Background(), guild.MXID, event.StateBridge, stateKey, content)
 	if err != nil {
 		guild.log.Warnln("Failed to update m.bridge:", err)
 	}
 	// TODO remove this once https://github.com/matrix-org/matrix-doc/pull/2346 is in spec
-	_, err = guild.bridge.Bot.SendStateEvent(guild.MXID, event.StateHalfShotBridge, stateKey, content)
+	_, err = guild.bridge.Bot.SendStateEvent(context.Background(), guild.MXID, event.StateHalfShotBridge, stateKey, content)
 	if err != nil {
 		guild.log.Warnln("Failed to update uk.half-shot.bridge:", err)
 	}
@@ -187,7 +188,7 @@ func (guild *Guild) CreateMatrixRoom(user *User, meta *discordgo.Guild) error {
 		initialState = append(initialState, &event.Event{
 			Type: event.StateRoomAvatar,
 			Content: event.Content{Parsed: &event.RoomAvatarEventContent{
-				URL: guild.AvatarURL,
+				URL: guild.AvatarURL.CUString(),
 			}},
 		})
 	}
@@ -199,7 +200,7 @@ func (guild *Guild) CreateMatrixRoom(user *User, meta *discordgo.Guild) error {
 		creationContent["m.federate"] = false
 	}
 
-	resp, err := guild.bridge.Bot.CreateRoom(&mautrix.ReqCreateRoom{
+	resp, err := guild.bridge.Bot.CreateRoom(context.Background(), &mautrix.ReqCreateRoom{
 		Visibility:      "private",
 		Name:            guild.Name,
 		Preset:          "private_chat",
@@ -254,7 +255,7 @@ func (guild *Guild) UpdateName(meta *discordgo.Guild) bool {
 	guild.PlainName = meta.Name
 	guild.NameSet = false
 	if guild.MXID != "" {
-		_, err := guild.bridge.Bot.SetRoomName(guild.MXID, guild.Name)
+		_, err := guild.bridge.Bot.SetRoomName(context.Background(), guild.MXID, guild.Name)
 		if err != nil {
 			guild.log.Warnln("Failed to update room name: %s", err)
 		} else {
@@ -284,7 +285,7 @@ func (guild *Guild) UpdateAvatar(iconID string) bool {
 		guild.AvatarURL = copied.MXC
 	}
 	if guild.MXID != "" {
-		_, err := guild.bridge.Bot.SetRoomAvatar(guild.MXID, guild.AvatarURL)
+		_, err := guild.bridge.Bot.SetRoomAvatar(context.Background(), guild.MXID, guild.AvatarURL)
 		if err != nil {
 			guild.log.Warnln("Failed to update room avatar:", err)
 		} else {
@@ -300,7 +301,7 @@ func (guild *Guild) cleanup() {
 	}
 	intent := guild.bridge.Bot
 	if guild.bridge.SpecVersions.Supports(mautrix.BeeperFeatureRoomYeeting) {
-		err := intent.BeeperDeleteRoom(guild.MXID)
+		err := intent.BeeperDeleteRoom(context.Background(), guild.MXID)
 		if err != nil && !errors.Is(err, mautrix.MNotFound) {
 			guild.log.Errorfln("Failed to delete %s using hungryserv yeet endpoint: %v", guild.MXID, err)
 		}

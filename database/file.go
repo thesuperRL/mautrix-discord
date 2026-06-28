@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -35,12 +36,12 @@ func (fq *FileQuery) New() *File {
 
 func (fq *FileQuery) Get(url string, encrypted bool) *File {
 	query := fileSelect + " WHERE url=$1 AND encrypted=$2"
-	return fq.New().Scan(fq.db.QueryRow(query, url, encrypted))
+	return fq.New().Scan(fq.db.QueryRow(context.Background(), query, url, encrypted))
 }
 
 func (fq *FileQuery) GetEmojiByMXC(mxc id.ContentURI) *File {
 	query := fileSelect + " WHERE mxc=$1 AND emoji_name<>'' LIMIT 1"
-	return fq.New().Scan(fq.db.QueryRow(query, mxc.String()))
+	return fq.New().Scan(fq.db.QueryRow(context.Background(), query, mxc.String()))
 }
 
 type File struct {
@@ -105,9 +106,8 @@ func positiveIntToNullInt32(val int) (ptr sql.NullInt32) {
 }
 
 func (f *File) Insert(txn dbutil.Execable) {
-	if txn == nil {
-		txn = f.db
-	}
+	ctx := context.Background()
+	var err error
 	var decryptionInfoStr sql.NullString
 	if f.DecryptionInfo != nil {
 		decryptionInfo, err := json.Marshal(f.DecryptionInfo)
@@ -118,11 +118,19 @@ func (f *File) Insert(txn dbutil.Execable) {
 		decryptionInfoStr.Valid = true
 		decryptionInfoStr.String = string(decryptionInfo)
 	}
-	_, err := txn.Exec(fileInsert,
-		f.URL, f.Encrypted, f.MXC.String(), strPtr(f.ID), strPtr(f.EmojiName), f.Size,
-		positiveIntToNullInt32(f.Width), positiveIntToNullInt32(f.Height), f.MimeType,
-		decryptionInfoStr, f.Timestamp.UnixMilli(),
-	)
+	if txn == nil {
+		_, err = f.db.Exec(ctx, fileInsert,
+			f.URL, f.Encrypted, f.MXC.String(), strPtr(f.ID), strPtr(f.EmojiName), f.Size,
+			positiveIntToNullInt32(f.Width), positiveIntToNullInt32(f.Height), f.MimeType,
+			decryptionInfoStr, f.Timestamp.UnixMilli(),
+		)
+	} else {
+		_, err = txn.ExecContext(ctx, fileInsert,
+			f.URL, f.Encrypted, f.MXC.String(), strPtr(f.ID), strPtr(f.EmojiName), f.Size,
+			positiveIntToNullInt32(f.Width), positiveIntToNullInt32(f.Height), f.MimeType,
+			decryptionInfoStr, f.Timestamp.UnixMilli(),
+		)
+	}
 	if err != nil {
 		f.log.Warnfln("Failed to insert copied file %v: %v", f.MXC, err)
 		panic(err)
@@ -130,7 +138,7 @@ func (f *File) Insert(txn dbutil.Execable) {
 }
 
 func (f *File) Delete() {
-	_, err := f.db.Exec("DELETE FROM discord_file WHERE url=$1 AND encrypted=$2", f.URL, f.Encrypted)
+	_, err := f.db.Exec(context.Background(), "DELETE FROM discord_file WHERE url=$1 AND encrypted=$2", f.URL, f.Encrypted)
 	if err != nil {
 		f.log.Warnfln("Failed to delete copied file %v: %v", f.MXC, err)
 		panic(err)

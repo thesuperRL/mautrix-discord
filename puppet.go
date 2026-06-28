@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strings"
@@ -11,7 +12,7 @@ import (
 
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/appservice"
-	"maunium.net/go/mautrix/bridge"
+	"go.mau.fi/mautrix-discord/internal/bridge"
 	"maunium.net/go/mautrix/id"
 
 	"go.mau.fi/mautrix-discord/database"
@@ -201,7 +202,7 @@ func (puppet *Puppet) UpdateName(info *discordgo.User) bool {
 	}
 	puppet.Name = newName
 	puppet.NameSet = false
-	err := puppet.DefaultIntent().SetDisplayName(newName)
+	err := puppet.DefaultIntent().SetDisplayName(context.Background(), newName)
 	if err != nil {
 		puppet.log.Warn().Err(err).Msg("Failed to update displayname")
 	} else {
@@ -266,7 +267,7 @@ func (puppet *Puppet) UpdateAvatar(info *discordgo.User) bool {
 		puppet.AvatarURL = url
 	}
 
-	err := puppet.DefaultIntent().SetAvatarURL(puppet.AvatarURL)
+	err := puppet.DefaultIntent().SetAvatarURL(context.Background(), puppet.AvatarURL)
 	if err != nil {
 		puppet.log.Warn().Err(err).Msg("Failed to update avatar")
 	} else {
@@ -298,7 +299,7 @@ func (puppet *Puppet) UpdateInfo(source *User, info *discordgo.User, message *di
 		}
 	}
 
-	err := puppet.DefaultIntent().EnsureRegistered()
+	err := puppet.DefaultIntent().EnsureRegistered(context.Background())
 	if err != nil {
 		puppet.log.Error().Err(err).Msg("Failed to ensure registered")
 	}
@@ -377,7 +378,7 @@ func (puppet *Puppet) ResendContactInfo() {
 	if puppet.IsWebhook {
 		contactInfo["com.beeper.bridge.identifiers"] = []string{}
 	}
-	err := puppet.DefaultIntent().BeeperUpdateProfile(contactInfo)
+	err := puppet.DefaultIntent().BeeperUpdateProfile(context.Background(), contactInfo)
 	if err != nil {
 		puppet.log.Warn().Err(err).Msg("Failed to store custom contact info in profile")
 	} else {

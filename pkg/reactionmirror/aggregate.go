@@ -3,7 +3,6 @@ package reactionmirror
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"strings"
 
@@ -25,14 +24,8 @@ type MatrixMemberLookup func(ctx context.Context, roomID id.RoomID, userID id.Us
 
 type AggregatedReactions map[string][]string
 
-type relationsPage struct {
-	Chunk     []*event.Event `json:"chunk"`
-	NextBatch string         `json:"next_batch,omitempty"`
-}
-
 type RelationsClient interface {
-	MakeFullRequest(params mautrix.FullRequest) ([]byte, error)
-	BuildClientURL(urlPath ...any) string
+	GetRelations(ctx context.Context, roomID id.RoomID, eventID id.EventID, req *mautrix.ReqGetRelations) (*mautrix.RespGetRelations, error)
 }
 
 func FetchAnnotationRelations(ctx context.Context, client RelationsClient, roomID id.RoomID, eventID id.EventID) ([]*event.Event, error) {
@@ -42,15 +35,9 @@ func FetchAnnotationRelations(ctx context.Context, client RelationsClient, roomI
 	var all []*event.Event
 	from := ""
 	for page := 0; page < 32; page++ {
-		path := client.BuildClientURL("v1", "rooms", roomID, "relations", eventID, event.RelAnnotation)
-		if from != "" {
-			path += "?from=" + url.QueryEscape(from)
-		}
-		var resp relationsPage
-		_, err := client.MakeFullRequest(mautrix.FullRequest{
-			Method:       "GET",
-			URL:          path,
-			ResponseJSON: &resp,
+		resp, err := client.GetRelations(ctx, roomID, eventID, &mautrix.ReqGetRelations{
+			RelationType: event.RelAnnotation,
+			From:         from,
 		})
 		if err != nil {
 			return nil, err

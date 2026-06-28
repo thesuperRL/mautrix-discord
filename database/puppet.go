@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 
 	"go.mau.fi/util/dbutil"
@@ -35,7 +36,7 @@ func (pq *PuppetQuery) GetByCustomMXID(mxid id.UserID) *Puppet {
 }
 
 func (pq *PuppetQuery) get(query string, args ...interface{}) *Puppet {
-	return pq.New().Scan(pq.db.QueryRow(query, args...))
+	return pq.New().Scan(pq.db.QueryRow(context.Background(), query, args...))
 }
 
 func (pq *PuppetQuery) GetAll() []*Puppet {
@@ -47,7 +48,7 @@ func (pq *PuppetQuery) GetAllWithCustomMXID() []*Puppet {
 }
 
 func (pq *PuppetQuery) getAll(query string, args ...interface{}) []*Puppet {
-	rows, err := pq.db.Query(query, args...)
+	rows, err := pq.db.Query(context.Background(), query, args...)
 	if err != nil || rows == nil {
 		return nil
 	}
@@ -119,7 +120,7 @@ func (p *Puppet) Insert() {
 		)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 	`
-	_, err := p.db.Exec(query, p.ID, p.Name, p.NameSet, p.Avatar, p.AvatarURL.String(), p.AvatarSet, p.ContactInfoSet,
+	_, err := p.db.Exec(context.Background(), query, p.ID, p.Name, p.NameSet, p.Avatar, p.AvatarURL.String(), p.AvatarSet, p.ContactInfoSet,
 		p.GlobalName, p.Username, p.Discriminator, p.IsBot, p.IsWebhook, p.IsApplication,
 		strPtr(p.CustomMXID), strPtr(p.AccessToken), strPtr(p.NextBatch))
 
@@ -136,7 +137,7 @@ func (p *Puppet) Update() {
 		                  custom_mxid=$13, access_token=$14, next_batch=$15
 		WHERE id=$16
 	`
-	_, err := p.db.Exec(
+	_, err := p.db.Exec(context.Background(), 
 		query,
 		p.Name, p.NameSet, p.Avatar, p.AvatarURL.String(), p.AvatarSet, p.ContactInfoSet,
 		p.GlobalName, p.Username, p.Discriminator, p.IsBot, p.IsWebhook, p.IsApplication,

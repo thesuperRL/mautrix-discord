@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"time"
@@ -46,7 +47,7 @@ func (u *User) scanUserPortals(rows dbutil.Rows) []UserPortal {
 }
 
 func (db *Database) GetUsersInPortal(channelID string) []id.UserID {
-	rows, err := db.Query("SELECT user_mxid FROM user_portal WHERE discord_id=$1", channelID)
+	rows, err := db.Query(context.Background(), "SELECT user_mxid FROM user_portal WHERE discord_id=$1", channelID)
 	if err != nil {
 		db.Portal.log.Errorln("Failed to get users in portal:", err)
 	}
@@ -64,7 +65,7 @@ func (db *Database) GetUsersInPortal(channelID string) []id.UserID {
 }
 
 func (u *User) GetPortals() []UserPortal {
-	rows, err := u.db.Query("SELECT discord_id, type, timestamp, in_space FROM user_portal WHERE user_mxid=$1", u.MXID)
+	rows, err := u.db.Query(context.Background(), "SELECT discord_id, type, timestamp, in_space FROM user_portal WHERE user_mxid=$1", u.MXID)
 	if err != nil {
 		u.log.Errorln("Failed to get portals:", err)
 		panic(err)
@@ -74,7 +75,7 @@ func (u *User) GetPortals() []UserPortal {
 
 func (u *User) IsInSpace(discordID string) (isIn bool) {
 	query := `SELECT in_space FROM user_portal WHERE user_mxid=$1 AND discord_id=$2`
-	err := u.db.QueryRow(query, u.MXID, discordID).Scan(&isIn)
+	err := u.db.QueryRow(context.Background(), query, u.MXID, discordID).Scan(&isIn)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		u.log.Warnfln("Failed to scan in_space for %s/%s: %v", u.MXID, discordID, err)
 		panic(err)
@@ -84,7 +85,7 @@ func (u *User) IsInSpace(discordID string) (isIn bool) {
 
 func (u *User) IsInPortal(discordID string) (isIn bool) {
 	query := `SELECT EXISTS(SELECT 1 FROM user_portal WHERE user_mxid=$1 AND discord_id=$2)`
-	err := u.db.QueryRow(query, u.MXID, discordID).Scan(&isIn)
+	err := u.db.QueryRow(context.Background(), query, u.MXID, discordID).Scan(&isIn)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		u.log.Warnfln("Failed to scan in_space for %s/%s: %v", u.MXID, discordID, err)
 		panic(err)
@@ -99,7 +100,7 @@ func (u *User) MarkInPortal(portal UserPortal) {
 		ON CONFLICT (discord_id, user_mxid) DO UPDATE
 		    SET timestamp=excluded.timestamp, in_space=excluded.in_space
 	`
-	_, err := u.db.Exec(query, portal.DiscordID, portal.Type, u.MXID, portal.Timestamp.UnixMilli(), portal.InSpace)
+	_, err := u.db.Exec(context.Background(), query, portal.DiscordID, portal.Type, u.MXID, portal.Timestamp.UnixMilli(), portal.InSpace)
 	if err != nil {
 		u.log.Errorfln("Failed to insert user portal %s/%s: %v", u.MXID, portal.DiscordID, err)
 		panic(err)
@@ -108,7 +109,7 @@ func (u *User) MarkInPortal(portal UserPortal) {
 
 func (u *User) MarkNotInPortal(discordID string) {
 	query := `DELETE FROM user_portal WHERE user_mxid=$1 AND discord_id=$2`
-	_, err := u.db.Exec(query, u.MXID, discordID)
+	_, err := u.db.Exec(context.Background(), query, u.MXID, discordID)
 	if err != nil {
 		u.log.Errorfln("Failed to remove user portal %s/%s: %v", u.MXID, discordID, err)
 		panic(err)
@@ -117,7 +118,7 @@ func (u *User) MarkNotInPortal(discordID string) {
 
 func (u *User) PortalHasOtherUsers(discordID string) (hasOtherUsers bool) {
 	query := `SELECT COUNT(*) > 0 FROM user_portal WHERE user_mxid<>$1 AND discord_id=$2`
-	err := u.db.QueryRow(query, u.MXID, discordID).Scan(&hasOtherUsers)
+	err := u.db.QueryRow(context.Background(), query, u.MXID, discordID).Scan(&hasOtherUsers)
 	if err != nil {
 		u.log.Errorfln("Failed to check if %s has users other than %s: %v", discordID, u.MXID, err)
 		panic(err)
@@ -131,7 +132,7 @@ func (u *User) PrunePortalList(beforeTS time.Time) []UserPortal {
 		WHERE user_mxid=$1 AND timestamp<$2 AND type IN ('dm', 'guild')
 		RETURNING discord_id, type, timestamp, in_space
 	`
-	rows, err := u.db.Query(query, u.MXID, beforeTS.UnixMilli())
+	rows, err := u.db.Query(context.Background(), query, u.MXID, beforeTS.UnixMilli())
 	if err != nil {
 		u.log.Errorln("Failed to prune user guild list:", err)
 		panic(err)

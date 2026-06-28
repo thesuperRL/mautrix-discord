@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -46,37 +47,37 @@ func (mq *MessageQuery) scanAll(rows dbutil.Rows, err error) []*Message {
 
 func (mq *MessageQuery) GetByDiscordID(key PortalKey, discordID string) []*Message {
 	query := messageSelect + " WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND dcid=$3 ORDER BY dc_attachment_id ASC"
-	return mq.scanAll(mq.db.Query(query, key.ChannelID, key.Receiver, discordID))
+	return mq.scanAll(mq.db.Query(context.Background(), query, key.ChannelID, key.Receiver, discordID))
 }
 
 func (mq *MessageQuery) GetFirstByDiscordID(key PortalKey, discordID string) *Message {
 	query := messageSelect + " WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND dcid=$3 ORDER BY dc_attachment_id ASC LIMIT 1"
-	return mq.New().Scan(mq.db.QueryRow(query, key.ChannelID, key.Receiver, discordID))
+	return mq.New().Scan(mq.db.QueryRow(context.Background(), query, key.ChannelID, key.Receiver, discordID))
 }
 
 func (mq *MessageQuery) GetLastByDiscordID(key PortalKey, discordID string) *Message {
 	query := messageSelect + " WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND dcid=$3 ORDER BY dc_attachment_id DESC LIMIT 1"
-	return mq.New().Scan(mq.db.QueryRow(query, key.ChannelID, key.Receiver, discordID))
+	return mq.New().Scan(mq.db.QueryRow(context.Background(), query, key.ChannelID, key.Receiver, discordID))
 }
 
 func (mq *MessageQuery) GetClosestBefore(key PortalKey, threadID string, ts time.Time) *Message {
 	query := messageSelect + " WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND dc_thread_id=$3 AND timestamp<=$4 ORDER BY timestamp DESC, dc_attachment_id DESC LIMIT 1"
-	return mq.New().Scan(mq.db.QueryRow(query, key.ChannelID, key.Receiver, threadID, ts.UnixMilli()))
+	return mq.New().Scan(mq.db.QueryRow(context.Background(), query, key.ChannelID, key.Receiver, threadID, ts.UnixMilli()))
 }
 
 func (mq *MessageQuery) GetLastInThread(key PortalKey, threadID string) *Message {
 	query := messageSelect + " WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND dc_thread_id=$3 ORDER BY timestamp DESC, dc_attachment_id DESC LIMIT 1"
-	return mq.New().Scan(mq.db.QueryRow(query, key.ChannelID, key.Receiver, threadID))
+	return mq.New().Scan(mq.db.QueryRow(context.Background(), query, key.ChannelID, key.Receiver, threadID))
 }
 
 func (mq *MessageQuery) GetLast(key PortalKey) *Message {
 	query := messageSelect + " WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 ORDER BY timestamp DESC LIMIT 1"
-	return mq.New().Scan(mq.db.QueryRow(query, key.ChannelID, key.Receiver))
+	return mq.New().Scan(mq.db.QueryRow(context.Background(), query, key.ChannelID, key.Receiver))
 }
 
 func (mq *MessageQuery) DeleteAll(key PortalKey) {
 	query := "DELETE FROM message WHERE dc_chan_id=$1 AND dc_chan_receiver=$2"
-	_, err := mq.db.Exec(query, key.ChannelID, key.Receiver)
+	_, err := mq.db.Exec(context.Background(), query, key.ChannelID, key.Receiver)
 	if err != nil {
 		mq.log.Warnfln("Failed to delete messages of %s: %v", key, err)
 		panic(err)
@@ -86,7 +87,7 @@ func (mq *MessageQuery) DeleteAll(key PortalKey) {
 func (mq *MessageQuery) GetByMXID(key PortalKey, mxid id.EventID) *Message {
 	query := messageSelect + " WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND mxid=$3"
 
-	row := mq.db.QueryRow(query, key.ChannelID, key.Receiver, mxid)
+	row := mq.db.QueryRow(context.Background(), query, key.ChannelID, key.Receiver, mxid)
 	if row == nil {
 		return nil
 	}
@@ -118,7 +119,7 @@ func (mq *MessageQuery) MassInsert(key PortalKey, msgs []Message) {
 		params[baseIndex+7] = msg.SenderMXID.String()
 		placeholders[i] = fmt.Sprintf(valueStringFormat, baseIndex+1, baseIndex+2, baseIndex+3, baseIndex+4, baseIndex+5, baseIndex+6, baseIndex+7, baseIndex+8)
 	}
-	_, err := mq.db.Exec(fmt.Sprintf(messageMassInsertTemplate, strings.Join(placeholders, ", ")), params...)
+	_, err := mq.db.Exec(context.Background(), fmt.Sprintf(messageMassInsertTemplate, strings.Join(placeholders, ", ")), params...)
 	if err != nil {
 		mq.log.Warnfln("Failed to insert %d messages: %v", len(msgs), err)
 		panic(err)
@@ -216,7 +217,7 @@ func (m *Message) MassInsertParts(msgs []MessagePart) {
 		params[8+i*2+1] = msg.MXID
 		placeholders[i] = fmt.Sprintf(valueStringFormat, 8+i*2+1, 8+i*2+2)
 	}
-	_, err := m.db.Exec(fmt.Sprintf(messageMassInsertTemplate, strings.Join(placeholders, ", ")), params...)
+	_, err := m.db.Exec(context.Background(), fmt.Sprintf(messageMassInsertTemplate, strings.Join(placeholders, ", ")), params...)
 	if err != nil {
 		m.log.Warnfln("Failed to insert %d parts of %s@%s: %v", len(msgs), m.DiscordID, m.Channel, err)
 		panic(err)
@@ -224,7 +225,7 @@ func (m *Message) MassInsertParts(msgs []MessagePart) {
 }
 
 func (m *Message) Insert() {
-	_, err := m.db.Exec(messageInsertQuery,
+	_, err := m.db.Exec(context.Background(), messageInsertQuery,
 		m.DiscordID, m.AttachmentID, m.Channel.ChannelID, m.Channel.Receiver, m.SenderID,
 		m.Timestamp.UnixMilli(), m.editTimestampVal(), m.ThreadID, m.MXID, m.SenderMXID.String())
 
@@ -241,7 +242,7 @@ const editUpdateQuery = `
 `
 
 func (m *Message) UpdateEditTimestamp(ts time.Time) {
-	_, err := m.db.Exec(editUpdateQuery, ts.UnixNano(), m.DiscordID, m.AttachmentID, m.Channel.ChannelID, m.Channel.Receiver)
+	_, err := m.db.Exec(context.Background(), editUpdateQuery, ts.UnixNano(), m.DiscordID, m.AttachmentID, m.Channel.ChannelID, m.Channel.Receiver)
 	if err != nil {
 		m.log.Warnfln("Failed to update edit timestamp of %s@%s: %v", m.DiscordID, m.Channel, err)
 		panic(err)
@@ -250,7 +251,7 @@ func (m *Message) UpdateEditTimestamp(ts time.Time) {
 
 func (m *Message) Delete() {
 	query := "DELETE FROM message WHERE dcid=$1 AND dc_chan_id=$2 AND dc_chan_receiver=$3 AND dc_attachment_id=$4"
-	_, err := m.db.Exec(query, m.DiscordID, m.Channel.ChannelID, m.Channel.Receiver, m.AttachmentID)
+	_, err := m.db.Exec(context.Background(), query, m.DiscordID, m.Channel.ChannelID, m.Channel.Receiver, m.AttachmentID)
 	if err != nil {
 		m.log.Warnfln("Failed to delete %q of %s@%s: %v", m.AttachmentID, m.DiscordID, m.Channel, err)
 		panic(err)

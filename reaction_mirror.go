@@ -37,7 +37,7 @@ func (portal *Portal) matrixMemberDisplayName(_ context.Context, userID id.UserI
 	if puppet := portal.bridge.GetPuppetByMXID(userID); puppet != nil && puppet.Name != "" {
 		return puppet.Name
 	}
-	if member := portal.bridge.StateStore.GetMember(portal.MXID, userID); member != nil && member.Displayname != "" {
+	if member, _ := portal.bridge.StateStore.GetMember(context.Background(), portal.MXID, userID); member != nil && member.Displayname != "" {
 		return member.Displayname
 	}
 	return ""
@@ -153,7 +153,7 @@ func (portal *Portal) refreshReactionMirror(msg *database.Message) {
 		portal.notifyReactionMirrorError(msg, nil, "no Matrix client")
 		return
 	}
-	targetEvt, err := client.GetEvent(portal.MXID, msg.MXID)
+	targetEvt, err := client.GetEvent(context.Background(), portal.MXID, msg.MXID)
 	if err != nil {
 		return
 	}

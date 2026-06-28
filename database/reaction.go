@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 
@@ -32,7 +33,7 @@ func (rq *ReactionQuery) GetAllForMessage(key PortalKey, discordMessageID string
 }
 
 func (rq *ReactionQuery) getAll(query string, args ...interface{}) []*Reaction {
-	rows, err := rq.db.Query(query, args...)
+	rows, err := rq.db.Query(context.Background(), query, args...)
 	if err != nil || rows == nil {
 		return nil
 	}
@@ -58,7 +59,7 @@ func (rq *ReactionQuery) GetByMXID(mxid id.EventID) *Reaction {
 }
 
 func (rq *ReactionQuery) get(query string, args ...interface{}) *Reaction {
-	row := rq.db.QueryRow(query, args...)
+	row := rq.db.QueryRow(context.Background(), query, args...)
 	if row == nil {
 		return nil
 	}
@@ -107,7 +108,7 @@ func (r *Reaction) Insert() {
 		INSERT INTO reaction (dc_msg_id, dc_first_attachment_id, dc_sender, dc_emoji_name, dc_chan_id, dc_chan_receiver, dc_thread_id, mxid)
 		VALUES($1, $2, $3, $4, $5, $6, $7, $8)
 	`
-	_, err := r.db.Exec(query, r.MessageID, r.FirstAttachmentID, r.Sender, r.EmojiName, r.Channel.ChannelID, r.Channel.Receiver, r.ThreadID, r.MXID)
+	_, err := r.db.Exec(context.Background(), query, r.MessageID, r.FirstAttachmentID, r.Sender, r.EmojiName, r.Channel.ChannelID, r.Channel.Receiver, r.ThreadID, r.MXID)
 	if err != nil {
 		r.log.Warnfln("Failed to insert reaction for %s@%s: %v", r.MessageID, r.Channel, err)
 		panic(err)
@@ -116,7 +117,7 @@ func (r *Reaction) Insert() {
 
 func (r *Reaction) Delete() {
 	query := "DELETE FROM reaction WHERE dc_msg_id=$1 AND dc_sender=$2 AND dc_emoji_name=$3"
-	_, err := r.db.Exec(query, r.MessageID, r.Sender, r.EmojiName)
+	_, err := r.db.Exec(context.Background(), query, r.MessageID, r.Sender, r.EmojiName)
 	if err != nil {
 		r.log.Warnfln("Failed to delete reaction for %s@%s: %v", r.MessageID, r.Channel, err)
 		panic(err)

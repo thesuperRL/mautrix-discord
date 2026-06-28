@@ -23,9 +23,9 @@ import (
 	"go.mau.fi/util/dbutil"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/appservice"
-	"maunium.net/go/mautrix/bridge"
-	"maunium.net/go/mautrix/bridge/bridgeconfig"
-	"maunium.net/go/mautrix/bridge/status"
+	"go.mau.fi/mautrix-discord/internal/bridge"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/status"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 	"maunium.net/go/mautrix/pushrules"
@@ -353,7 +353,7 @@ func (user *User) getSpaceRoom(ptr *id.RoomID, name, topic string, parent id.Roo
 		Type: event.StateRoomAvatar,
 		Content: event.Content{
 			Parsed: &event.RoomAvatarEventContent{
-				URL: user.bridge.Config.AppService.Bot.ParsedAvatar,
+				URL: user.bridge.Config.AppService.Bot.ParsedAvatar.CUString(),
 			},
 		},
 	}}
@@ -372,7 +372,7 @@ func (user *User) getSpaceRoom(ptr *id.RoomID, name, topic string, parent id.Roo
 		})
 	}
 
-	resp, err := user.bridge.Bot.CreateRoom(&mautrix.ReqCreateRoom{
+	resp, err := user.bridge.Bot.CreateRoom(context.Background(), &mautrix.ReqCreateRoom{
 		Visibility:   "private",
 		Name:         name,
 		Topic:        topic,
@@ -397,7 +397,7 @@ func (user *User) getSpaceRoom(ptr *id.RoomID, name, topic string, parent id.Roo
 		user.ensureInvited(nil, *ptr, false, true)
 
 		if parent != "" {
-			_, err = user.bridge.Bot.SendStateEvent(parent, event.StateSpaceChild, resp.RoomID.String(), &event.SpaceChildEventContent{
+			_, err = user.bridge.Bot.SendStateEvent(context.Background(), parent, event.StateSpaceChild, resp.RoomID.String(), &event.SpaceChildEventContent{
 				Via:   []string{user.bridge.AS.HomeserverDomain},
 				Order: " 0000",
 			})
@@ -448,10 +448,10 @@ func (user *User) mutePortal(intent *appservice.IntentAPI, portal *Portal, unmut
 	var err error
 	if unmute {
 		user.log.Debug().Str("room_id", portal.MXID.String()).Msg("Unmuting portal")
-		err = intent.DeletePushRule("global", pushrules.RoomRule, string(portal.MXID))
+		err = intent.DeletePushRule(context.Background(), "global", pushrules.RoomRule, string(portal.MXID))
 	} else {
 		user.log.Debug().Str("room_id", portal.MXID.String()).Msg("Muting portal")
-		err = intent.PutPushRule("global", pushrules.RoomRule, string(portal.MXID), &mautrix.ReqPutPushRule{
+		err = intent.PutPushRule(context.Background(), "global", pushrules.RoomRule, string(portal.MXID), &mautrix.ReqPutPushRule{
 			Actions: []pushrules.PushActionType{pushrules.ActionDontNotify},
 		})
 	}
@@ -870,7 +870,7 @@ func (user *User) addPrivateChannelToSpace(portal *Portal) bool {
 	if portal.MXID == "" {
 		return false
 	}
-	_, err := user.bridge.Bot.SendStateEvent(user.GetDMSpaceRoom(), event.StateSpaceChild, portal.MXID.String(), &event.SpaceChildEventContent{
+	_, err := user.bridge.Bot.SendStateEvent(context.Background(), user.GetDMSpaceRoom(), event.StateSpaceChild, portal.MXID.String(), &event.SpaceChildEventContent{
 		Via: []string{user.bridge.AS.HomeserverDomain},
 	})
 	if err != nil {
@@ -916,7 +916,7 @@ func (user *User) handleRelationshipChange(userID, nickname string) {
 		if portal.shouldSetDMRoomMetadata() {
 			updated = portal.UpdateNameDirect(puppet.Name, false)
 		} else if portal.NameSet {
-			_, err := portal.MainIntent().SendStateEvent(portal.MXID, event.StateRoomName, "", map[string]any{})
+			_, err := portal.MainIntent().SendStateEvent(context.Background(), portal.MXID, event.StateRoomName, "", map[string]any{})
 			if err != nil {
 				portal.log.Warn().Err(err).Msg("Failed to clear room name after friend nickname was removed")
 			} else {
@@ -954,7 +954,7 @@ func (user *User) handlePrivateChannel(portal *Portal, meta *discordgo.Channel, 
 
 func (user *User) addGuildToSpace(guild *Guild, isInSpace bool, timestamp time.Time) bool {
 	if len(guild.MXID) > 0 && !isInSpace {
-		_, err := user.bridge.Bot.SendStateEvent(user.GetSpaceRoom(), event.StateSpaceChild, guild.MXID.String(), &event.SpaceChildEventContent{
+		_, err := user.bridge.Bot.SendStateEvent(context.Background(), user.GetSpaceRoom(), event.StateSpaceChild, guild.MXID.String(), &event.SpaceChildEventContent{
 			Via: []string{user.bridge.AS.HomeserverDomain},
 		})
 		if err != nil {
@@ -1004,7 +1004,7 @@ func (user *User) handleGuildRoles(guildID string, newRoles []*discordgo.Role) {
 	for _, role := range existingRoles {
 		existingRoleMap[role.ID] = role
 	}
-	txn, err := user.bridge.DB.Begin()
+	txn, err := user.bridge.DB.BeginTx(context.Background(), nil)
 	if err != nil {
 		user.log.Error().Err(err).Msg("Failed to start transaction for guild role sync")
 		panic(err)
@@ -1343,7 +1343,7 @@ func (user *User) messageAckHandler(m *discordgo.MessageAck) {
 			Msg("Dropping message ack event for unknown message")
 		return
 	}
-	err := dp.CustomIntent().SetReadMarkers(portal.MXID, user.makeReadMarkerContent(msg.MXID))
+	err := dp.CustomIntent().SetReadMarkers(context.Background(), portal.MXID, user.makeReadMarkerContent(msg.MXID))
 	if err != nil {
 		user.log.Error().Err(err).
 			Str("event_id", msg.MXID.String()).Str("message_id", msg.DiscordID).
@@ -1395,7 +1395,7 @@ func (user *User) ensureInvited(intent *appservice.IntentAPI, roomID id.RoomID, 
 	if intent == nil {
 		intent = user.bridge.Bot
 	}
-	if !ignoreCache && intent.StateStore.IsInvited(roomID, user.MXID) {
+	if !ignoreCache && intent.StateStore.IsInvited(context.Background(), roomID, user.MXID) {
 		return true
 	}
 	ret := false
@@ -1413,11 +1413,11 @@ func (user *User) ensureInvited(intent *appservice.IntentAPI, roomID id.RoomID, 
 		inviteContent.Raw["fi.mau.will_auto_accept"] = true
 	}
 
-	_, err := intent.SendStateEvent(roomID, event.StateMember, user.MXID.String(), &inviteContent)
+	_, err := intent.SendStateEvent(context.Background(), roomID, event.StateMember, user.MXID.String(), &inviteContent)
 
 	var httpErr mautrix.HTTPError
 	if err != nil && errors.As(err, &httpErr) && httpErr.RespError != nil && strings.Contains(httpErr.RespError.Err, "is already in the room") {
-		user.bridge.StateStore.SetMembership(roomID, user.MXID, event.MembershipJoin)
+		_ = user.bridge.StateStore.SetMembership(context.Background(), roomID, user.MXID, event.MembershipJoin)
 		ret = true
 	} else if err != nil {
 		user.log.Error().Err(err).Str("room_id", roomID.String()).Msg("Failed to invite user to room")
@@ -1426,7 +1426,7 @@ func (user *User) ensureInvited(intent *appservice.IntentAPI, roomID id.RoomID, 
 	}
 
 	if customPuppet != nil && customPuppet.CustomIntent() != nil {
-		err = customPuppet.CustomIntent().EnsureJoined(roomID, appservice.EnsureJoinedParams{IgnoreCache: true})
+		err = customPuppet.CustomIntent().EnsureJoined(context.Background(), roomID, appservice.EnsureJoinedParams{IgnoreCache: true})
 		if err != nil {
 			user.log.Warn().Err(err).Str("room_id", roomID.String()).Msg("Failed to auto-join room")
 			ret = false
@@ -1479,7 +1479,7 @@ func (user *User) updateDirectChats(chats map[id.UserID][]id.RoomID) {
 	var err error
 	if user.bridge.Config.Homeserver.Software == bridgeconfig.SoftwareAsmux {
 		urlPath := intent.BuildURL(mautrix.ClientURLPath{"unstable", "com.beeper.asmux", "dms"})
-		_, err = intent.MakeFullRequest(mautrix.FullRequest{
+		_, err = intent.MakeFullRequest(context.Background(), mautrix.FullRequest{
 			Method:      method,
 			URL:         urlPath,
 			Headers:     http.Header{"X-Asmux-Auth": {user.bridge.AS.Registration.AppToken}},
@@ -1488,7 +1488,7 @@ func (user *User) updateDirectChats(chats map[id.UserID][]id.RoomID) {
 	} else {
 		existingChats := map[id.UserID][]id.RoomID{}
 
-		err = intent.GetAccountData(event.AccountDataDirectChats.Type, &existingChats)
+		err = intent.GetAccountData(context.Background(), event.AccountDataDirectChats.Type, &existingChats)
 		if err != nil {
 			user.log.Warn().Err(err).Msg("Failed to get m.direct event to update it")
 			return
@@ -1504,7 +1504,7 @@ func (user *User) updateDirectChats(chats map[id.UserID][]id.RoomID) {
 			}
 		}
 
-		err = intent.SetAccountData(event.AccountDataDirectChats.Type, &chats)
+		err = intent.SetAccountData(context.Background(), event.AccountDataDirectChats.Type, &chats)
 	}
 
 	if err != nil {

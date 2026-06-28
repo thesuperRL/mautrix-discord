@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -92,16 +93,16 @@ func (gq *GuildQuery) New() *Guild {
 
 func (gq *GuildQuery) GetByID(dcid string) *Guild {
 	query := guildSelect + " WHERE dcid=$1"
-	return gq.New().Scan(gq.db.QueryRow(query, dcid))
+	return gq.New().Scan(gq.db.QueryRow(context.Background(), query, dcid))
 }
 
 func (gq *GuildQuery) GetByMXID(mxid id.RoomID) *Guild {
 	query := guildSelect + " WHERE mxid=$1"
-	return gq.New().Scan(gq.db.QueryRow(query, mxid))
+	return gq.New().Scan(gq.db.QueryRow(context.Background(), query, mxid))
 }
 
 func (gq *GuildQuery) GetAll() []*Guild {
-	rows, err := gq.db.Query(guildSelect)
+	rows, err := gq.db.Query(context.Background(), guildSelect)
 	if err != nil {
 		gq.log.Errorln("Failed to query guilds:", err)
 		return nil
@@ -166,7 +167,7 @@ func (g *Guild) Insert() {
 		INSERT INTO guild (dcid, mxid, plain_name, name, name_set, avatar, avatar_url, avatar_set, bridging_mode)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 	`
-	_, err := g.db.Exec(query, g.ID, g.mxidPtr(), g.PlainName, g.Name, g.NameSet, g.Avatar, g.AvatarURL.String(), g.AvatarSet, g.BridgingMode)
+	_, err := g.db.Exec(context.Background(), query, g.ID, g.mxidPtr(), g.PlainName, g.Name, g.NameSet, g.Avatar, g.AvatarURL.String(), g.AvatarSet, g.BridgingMode)
 	if err != nil {
 		g.log.Warnfln("Failed to insert %s: %v", g.ID, err)
 		panic(err)
@@ -178,7 +179,7 @@ func (g *Guild) Update() {
 		UPDATE guild SET mxid=$1, plain_name=$2, name=$3, name_set=$4, avatar=$5, avatar_url=$6, avatar_set=$7, bridging_mode=$8
 		WHERE dcid=$9
 	`
-	_, err := g.db.Exec(query, g.mxidPtr(), g.PlainName, g.Name, g.NameSet, g.Avatar, g.AvatarURL.String(), g.AvatarSet, g.BridgingMode, g.ID)
+	_, err := g.db.Exec(context.Background(), query, g.mxidPtr(), g.PlainName, g.Name, g.NameSet, g.Avatar, g.AvatarURL.String(), g.AvatarSet, g.BridgingMode, g.ID)
 	if err != nil {
 		g.log.Warnfln("Failed to update %s: %v", g.ID, err)
 		panic(err)
@@ -186,7 +187,7 @@ func (g *Guild) Update() {
 }
 
 func (g *Guild) Delete() {
-	_, err := g.db.Exec("DELETE FROM guild WHERE dcid=$1", g.ID)
+	_, err := g.db.Exec(context.Background(), "DELETE FROM guild WHERE dcid=$1", g.ID)
 	if err != nil {
 		g.log.Warnfln("Failed to delete %s: %v", g.ID, err)
 		panic(err)
