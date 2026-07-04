@@ -146,10 +146,6 @@ func (br *DiscordBridge) pillConverter(displayname, mxid, eventID string, ctx fo
 			}
 		}
 	} else if mxid[0] == '@' {
-		allowedMentions, _ := ctx.ReturnData[formatterContextInputAllowedMentionsKey].([]id.UserID)
-		if allowedMentions != nil && !slices.Contains(allowedMentions, id.UserID(mxid)) {
-			return displayname
-		}
 		mentions := ctx.ReturnData[formatterContextAllowedMentionsKey].(*discordgo.MessageAllowedMentions)
 		parsedID, ok := br.ParsePuppetMXID(id.UserID(mxid))
 		if ok {
@@ -167,6 +163,10 @@ func (br *DiscordBridge) pillConverter(displayname, mxid, eventID string, ctx fo
 				return fmt.Sprintf("<@%s>", discordID)
 			}
 		}
+		if discordID := bridgeidentity.DiscordIDForMXID(id.UserID(mxid)); discordID != "" {
+			mentions.Users = appendIfNotContains(mentions.Users, discordID)
+			return fmt.Sprintf("<@%s>", discordID)
+		}
 		if replyToUser, ok := ctx.ReturnData[formatterContextReplyToUserKey].(id.UserID); ok && replyToUser != "" {
 			if bridgeidentity.IsSlackBridgeBot(id.UserID(mxid)) || bridgeidentity.IsDiscordBridgeBot(id.UserID(mxid)) {
 				if discordID := bridgeidentity.DiscordIDForMXID(replyToUser); discordID != "" {
@@ -174,6 +174,10 @@ func (br *DiscordBridge) pillConverter(displayname, mxid, eventID string, ctx fo
 					return fmt.Sprintf("<@%s>", discordID)
 				}
 			}
+		}
+		allowedMentions, _ := ctx.ReturnData[formatterContextInputAllowedMentionsKey].([]id.UserID)
+		if allowedMentions != nil && !slices.Contains(allowedMentions, id.UserID(mxid)) {
+			return displayname
 		}
 	}
 	return displayname
@@ -308,11 +312,22 @@ func (portal *Portal) replaceMatrixPingsInDiscordText(content *event.MessageEven
 	}
 	if content.Mentions.Room {
 		// Only convert a room ping to a real ping when governance says this channel
-		// belongs to a team: ping that team's role. There is no fallback - org-wide
-		// or unlinked channels (and teams whose role is missing) silently fail, so
-		// "@room" stays as inert text and nothing is pinged.
+		// belongs to a team: ping that team's configured role or @everyone.
+		// Org-wide or unlinked channels silently fail so "@room" stays inert.
 		if team := governancedata.Get().TeamForDiscordChannel(portal.Key.ChannelID); team != nil {
-			if roleID := portal.governanceTeamRoleID(team.TeamName); roleID != "" {
+			if team.MirrorEveryone {
+				for _, kw := range []string{"@room", "[@room]", "@\u2063ro\u2063om", "@here"} {
+					text = strings.ReplaceAll(text, kw, "@everyone")
+				}
+				if !strings.Contains(text, "@everyone") {
+					if text == "" {
+						text = "@everyone"
+					} else {
+						text = "@everyone " + text
+					}
+				}
+				allowedMentions.Parse = append(allowedMentions.Parse, discordgo.AllowedMentionTypeEveryone)
+			} else if roleID := portal.governanceTeamRoleID(team.MirrorTargetRole()); roleID != "" {
 				rolePing := fmt.Sprintf("<@&%s>", roleID)
 				for _, kw := range []string{"@room", "[@room]", "@\u2063ro\u2063om", "@here", "@everyone"} {
 					text = strings.ReplaceAll(text, kw, rolePing)

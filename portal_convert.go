@@ -669,12 +669,12 @@ func (portal *Portal) convertDiscordMentions(msg *discordgo.Message, syncGhosts 
 	if msg.MentionEveryone {
 		matrixMentions.Room = true
 	}
-	// A ping of the owning team's role counts as a room ping so it mirrors to
+	// A ping of the configured mirror role counts as a room ping so it mirrors to
 	// @channel on Slack. Pings of other teams' roles (wrong channel) do not.
 	if team := governancedata.Get().TeamForDiscordChannel(portal.Key.ChannelID); team != nil {
 		for _, roleID := range msg.MentionRoles {
 			role := portal.bridge.DB.Role.GetByID(portal.GuildID, roleID)
-			if role != nil && strings.EqualFold(role.Name, team.TeamName) {
+			if role != nil && team.RoleMirrorsToChannel(role.Name) {
 				matrixMentions.Room = true
 				break
 			}

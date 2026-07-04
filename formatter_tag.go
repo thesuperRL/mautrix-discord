@@ -281,9 +281,9 @@ func (r *discordTagHTMLRenderer) renderDiscordMention(w util.BufWriter, source [
 	case *astDiscordRoleMention:
 		role := node.portal.bridge.DB.Role.GetByID(node.portal.GuildID, strconv.FormatInt(node.id, 10))
 		if role != nil {
-			// A ping of the owning team's role in its own channel mirrors as a
+			// A ping of the configured mirror role in its own channel mirrors as a
 			// room ping (which becomes @channel on Slack). Other roles stay inert.
-			if team := governancedata.Get().TeamForDiscordChannel(node.portal.Key.ChannelID); team != nil && strings.EqualFold(role.Name, team.TeamName) {
+			if team := governancedata.Get().TeamForDiscordChannel(node.portal.Key.ChannelID); team != nil && team.RoleMirrorsToChannel(role.Name) {
 				_, _ = fmt.Fprintf(w, `<span class="discord-mention-everyone">@room</span>`)
 				return
 			}
