@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -111,6 +112,7 @@ func Get() *Map {
 	if m, err := loadFromKeycloak(); err == nil {
 		globalMap = m
 	} else {
+		log.Printf("bridgeidentity: keycloak load failed: %v", err)
 		globalMap = emptyMap()
 	}
 	loadedAt = time.Now()
@@ -153,6 +155,7 @@ func loadFromKeycloak() (*Map, error) {
 	if err := loadFromKeycloakScan(m, baseURL, realm, token); err != nil {
 		return nil, err
 	}
+	log.Printf("bridgeidentity: loaded %d cross-platform links", len(m.discordToSlack))
 	return m, nil
 }
 
