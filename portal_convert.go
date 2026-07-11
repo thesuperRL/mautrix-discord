@@ -36,6 +36,7 @@ import (
 	"maunium.net/go/mautrix/id"
 
 	"go.mau.fi/mautrix-discord/database"
+	"go.mau.fi/mautrix-discord/pkg/bridgeidentity"
 	"go.mau.fi/mautrix-discord/pkg/governancedata"
 )
 
@@ -670,16 +671,26 @@ func (portal *Portal) convertDiscordMentions(msg *discordgo.Message, syncGhosts 
 		matrixMentions.Room = true
 	}
 	// A ping of the configured mirror role counts as a room ping so it mirrors to
-	// @channel on Slack. Pings of other teams' roles (wrong channel) do not.
-	if team := governancedata.Get().TeamForDiscordChannel(portal.Key.ChannelID); team != nil {
+	// @channel on Slack. Pings of other teams' roles (wrong channel) do not. For a real
+	// team channel (not an org channel like Announcements/General), also expand into
+	// individual member mentions so Slack pings each team member directly.
+	if team := governancedata.Get().MirrorConfigForDiscordChannel(portal.Key.ChannelID); team != nil {
 		for _, roleID := range msg.MentionRoles {
 			role := portal.bridge.DB.Role.GetByID(portal.GuildID, roleID)
 			if role != nil && team.RoleMirrorsToChannel(role.Name) {
 				matrixMentions.Room = true
+				identity := bridgeidentity.Get()
+				for _, username := range governancedata.Get().TeamMembers(team.TeamSlug) {
+					if mxid := identity.MXIDForGovernanceUsername(username); mxid != "" {
+						matrixMentions.UserIDs = append(matrixMentions.UserIDs, mxid)
+					}
+				}
 				break
 			}
 		}
 	}
+	slices.Sort(matrixMentions.UserIDs)
+	matrixMentions.UserIDs = slices.Compact(matrixMentions.UserIDs)
 	return &matrixMentions
 }
 

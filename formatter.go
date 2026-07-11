@@ -312,9 +312,10 @@ func (portal *Portal) replaceMatrixPingsInDiscordText(content *event.MessageEven
 	}
 	if content.Mentions.Room {
 		// Only convert a room ping to a real ping when governance says this channel
-		// belongs to a team: ping that team's configured role or @everyone.
-		// Org-wide or unlinked channels silently fail so "@room" stays inert.
-		if team := governancedata.Get().TeamForDiscordChannel(portal.Key.ChannelID); team != nil {
+		// belongs to a team or has mirror config as an org channel (e.g. Announcements/
+		// General): ping that team's configured role or @everyone. Unlinked channels
+		// silently fail so "@room" stays inert.
+		if team := governancedata.Get().MirrorConfigForDiscordChannel(portal.Key.ChannelID); team != nil {
 			if team.MirrorEveryone {
 				for _, kw := range []string{"@room", "[@room]", "@\u2063ro\u2063om", "@here"} {
 					text = strings.ReplaceAll(text, kw, "@everyone")
