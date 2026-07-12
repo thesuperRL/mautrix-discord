@@ -158,7 +158,7 @@ func (br *DiscordBridge) pillConverter(displayname, mxid, eventID string, ctx fo
 			return fmt.Sprintf("<@%s>", mentionedUser.DiscordID)
 		}
 		if slackUserID := bridgeidentity.ParseSlackGhostUserID(id.UserID(mxid)); slackUserID != "" {
-			if discordID := bridgeidentity.Get().DiscordIDForSlack(slackUserID); discordID != "" {
+			if discordID := bridgeidentity.GetCached().DiscordIDForSlack(slackUserID); discordID != "" {
 				mentions.Users = appendIfNotContains(mentions.Users, discordID)
 				return fmt.Sprintf("<@%s>", discordID)
 			}
@@ -363,7 +363,7 @@ func (portal *Portal) replaceMatrixPingsInDiscordText(content *event.MessageEven
 			}
 		}
 		if discordID, ok := portal.bridge.ParsePuppetMXID(userID); ok {
-			if bridgeidentity.Get().HasDiscord(discordID) {
+			if bridgeidentity.GetCached().HasDiscord(discordID) {
 				continue
 			}
 			name := portal.matrixUserDisplayName(userID)
@@ -376,7 +376,7 @@ func (portal *Portal) replaceMatrixPingsInDiscordText(content *event.MessageEven
 			continue
 		}
 		if slackUserID := bridgeidentity.ParseSlackGhostUserID(userID); slackUserID != "" {
-			if discordID := bridgeidentity.Get().DiscordIDForSlack(slackUserID); discordID != "" {
+			if discordID := bridgeidentity.GetCached().DiscordIDForSlack(slackUserID); discordID != "" {
 				name := portal.matrixUserDisplayName(userID)
 				if name != "" {
 					ping := fmt.Sprintf("<@%s>", discordID)

@@ -679,7 +679,7 @@ func (portal *Portal) convertDiscordMentions(msg *discordgo.Message, syncGhosts 
 			role := portal.bridge.DB.Role.GetByID(portal.GuildID, roleID)
 			if role != nil && team.RoleMirrorsToChannel(role.Name) {
 				matrixMentions.Room = true
-				identity := bridgeidentity.Get()
+				identity := bridgeidentity.GetCached()
 				for _, username := range governancedata.Get().TeamMembers(team.TeamSlug) {
 					if mxid := identity.MXIDForGovernanceUsername(username); mxid != "" {
 						matrixMentions.UserIDs = append(matrixMentions.UserIDs, mxid)
