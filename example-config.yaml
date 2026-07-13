@@ -353,6 +353,14 @@ bridge:
         # Enable debug API at /debug with provisioning authentication.
         debug_endpoints: false
 
+    relay:
+        # Bridge users to prefer (in order) for actions that need a real logged-in
+        # Discord session but have no specific user to act as, e.g. starting a thread
+        # on behalf of a relay/webhook send (Discord webhooks can't start threads).
+        # Entries can be a Matrix user ID or a Discord user ID. If none of these are
+        # logged in, falls back to an arbitrary logged-in bridge user.
+        default_relays: []
+
     # Permissions for using the bridge.
     # Permitted values:
     #    relay - Talk through the relaybot (if enabled), no access otherwise
