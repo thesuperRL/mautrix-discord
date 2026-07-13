@@ -94,6 +94,13 @@ type BridgeConfig struct {
 
 	Permissions bridgeconfig.PermissionConfig `yaml:"permissions"`
 
+	Relay struct {
+		// DefaultRelays are matched (as a Matrix user ID or a Discord user ID) against
+		// logged-in bridge users to pick who creates threads on behalf of relay/webhook
+		// sends, instead of an arbitrary logged-in user.
+		DefaultRelays []string `yaml:"default_relays"`
+	} `yaml:"relay"`
+
 	usernameTemplate    *template.Template `yaml:"-"`
 	displaynameTemplate *template.Template `yaml:"-"`
 	channelNameTemplate *template.Template `yaml:"-"`

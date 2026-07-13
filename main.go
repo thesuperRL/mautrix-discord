@@ -133,11 +133,25 @@ func (br *DiscordBridge) Stop() {
 	}
 }
 
-// getLoggedInUserForPortal returns any bridge user with an active Discord session.
+// getLoggedInUserForPortal returns the configured relay user if logged in,
+// otherwise falls back to any bridge user with an active Discord session.
 // Used when relay/webhook sends need to create a thread on Discord.
 func (br *DiscordBridge) getLoggedInUserForPortal() *User {
 	br.usersLock.Lock()
 	defer br.usersLock.Unlock()
+	for _, relayID := range br.Config.Bridge.Relay.DefaultRelays {
+		if user, ok := br.usersByMXID[id.UserID(relayID)]; ok && user.Session != nil && user.IsLoggedIn() {
+			return user
+		}
+		for _, user := range br.usersByMXID {
+			if user.DiscordID == relayID && user.Session != nil && user.IsLoggedIn() {
+				return user
+			}
+		}
+	}
+	if len(br.Config.Bridge.Relay.DefaultRelays) > 0 {
+		br.Log.Warnln("No configured relay user is logged in, falling back to an arbitrary logged-in user for thread creation")
+	}
 	for _, user := range br.usersByMXID {
 		if user.Session != nil && user.IsLoggedIn() {
 			return user
