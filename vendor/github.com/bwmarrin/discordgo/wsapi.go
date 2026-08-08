@@ -358,6 +358,10 @@ type helloOp struct {
 // FailedHeartbeatAcks is the Number of heartbeat intervals to wait until forcing a connection restart.
 const FailedHeartbeatAcks time.Duration = 5 * time.Millisecond
 
+// ReconnectMinInterval is the minimum time between gateway Open() calls inside
+// reconnect(). Keeping this as a var (not const) allows tests to override it.
+var ReconnectMinInterval = 5 * time.Second
+
 // HeartbeatLatency returns the latency between heartbeat acknowledgement and heartbeat send.
 func (s *Session) HeartbeatLatency() time.Duration {
 
@@ -1043,6 +1047,15 @@ func (s *Session) identify() error {
 
 func (s *Session) reconnect() {
 
+	// Prevent two goroutines (listen and heartbeat can both fire on the same
+	// disconnect) from running simultaneous reconnect loops. The second caller
+	// returns immediately; the first will establish the new connection.
+	if !s.reconnectMu.TryLock() {
+		s.log(LogInformational, "reconnect already in progress, skipping duplicate call")
+		return
+	}
+	defer s.reconnectMu.Unlock()
+
 	s.log(LogInformational, "called")
 
 	var err error
@@ -1052,17 +1065,22 @@ func (s *Session) reconnect() {
 		wait := time.Duration(1)
 
 		for {
+			// Rate-limit Open() calls. If Discord accepts READY then drops the
+			// connection immediately (e.g. duplicate-session close), the next
+			// reconnect() call would restart with wait=1. ReconnectMinInterval
+			// prevents faster-than-5s hammering even across successful opens.
+			if since := time.Since(s.lastOpenAttempt); since < ReconnectMinInterval {
+				s.log(LogInformational, "rate limiting reconnect, sleeping %s", ReconnectMinInterval-since)
+				time.Sleep(ReconnectMinInterval - since)
+			}
+			s.lastOpenAttempt = time.Now()
+
 			s.log(LogInformational, "trying to reconnect to gateway")
 
 			err = s.Open()
 			if err == nil {
 				s.log(LogInformational, "successfully reconnected to gateway")
 
-				// I'm not sure if this is actually needed.
-				// if the gw reconnect works properly, voice should stay alive
-				// However, there seems to be cases where something "weird"
-				// happens.  So we're doing this for now just to improve
-				// stability in those edge cases.
 				if s.ShouldReconnectVoiceOnSessionError {
 					s.RLock()
 					defer s.RUnlock()
@@ -1071,8 +1089,6 @@ func (s *Session) reconnect() {
 						s.log(LogInformational, "reconnecting voice connection to guild %s", v.GuildID)
 						go v.reconnect()
 
-						// This is here just to prevent violently spamming the
-						// voice reconnects
 						time.Sleep(1 * time.Second)
 					}
 				}

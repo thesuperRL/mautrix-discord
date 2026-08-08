@@ -156,6 +156,14 @@ type Session struct {
 	imageHeaders     map[string]string
 
 	Logger func(msgL, caller int, format string, a ...interface{})
+
+	// reconnectMu serializes reconnect() calls; TryLock prevents a second
+	// goroutine from duplicating a reconnect already in progress.
+	reconnectMu sync.Mutex
+
+	// lastOpenAttempt records when Open() was last called inside reconnect()
+	// to enforce ReconnectMinInterval between successive attempts.
+	lastOpenAttempt time.Time
 }
 
 // ApplicationIntegrationType dictates where application can be installed and its available interaction contexts.
