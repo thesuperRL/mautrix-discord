@@ -253,11 +253,11 @@ var matrixHTMLParser = &format.HTMLParser{
 			}
 			return text
 		} else if !discordLinkRegexFull.MatchString(href) {
-			return fmt.Sprintf("%s (%s)", escapeDiscordMarkdown(text), escapeDiscordMarkdown(href))
+			return fmt.Sprintf("%s (%s)", text, escapeDiscordMarkdown(href))
 		} else if !allowPreview {
-			return fmt.Sprintf("[%s](<%s>)", escapeDiscordMarkdown(text), href)
+			return fmt.Sprintf("[%s](<%s>)", text, href)
 		} else {
-			return fmt.Sprintf("[%s](%s)", escapeDiscordMarkdown(text), href)
+			return fmt.Sprintf("[%s](%s)", text, href)
 		}
 	},
 }
