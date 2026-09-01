@@ -1585,13 +1585,17 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 			threadID = existingThread.ID
 			existingThread.initialBackfillAttempted = true
 		} else {
-			threadSender := outboundSender
-			if isWebhookSend {
-				threadSender = portal.bridge.getLoggedInUserForPortal()
-				if threadSender == nil {
+			// Always prefer the configured relay account for thread creation so threads
+			// appear under the bot identity, even when the sender is logged into Discord.
+			// Fall back to the sender only if no relay account is available; error out
+			// only when the sender also has no Discord session (pure webhook send).
+			threadSender := portal.bridge.getLoggedInUserForPortal()
+			if threadSender == nil {
+				if isWebhookSend {
 					go portal.sendMessageMetrics(evt, errCantStartThread, "Dropping")
 					return
 				}
+				threadSender = outboundSender
 			}
 			var err error
 			threadID, err = portal.startThreadFromMatrix(threadSender, threadRoot)
