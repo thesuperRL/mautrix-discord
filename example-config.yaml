@@ -354,11 +354,9 @@ bridge:
         debug_endpoints: false
 
     relay:
-        # Bridge users to prefer (in order) for actions that need a real logged-in
-        # Discord session but have no specific user to act as, e.g. starting a thread
-        # on behalf of a relay/webhook send (Discord webhooks can't start threads).
-        # Entries can be a Matrix user ID or a Discord user ID. If none of these are
-        # logged in, falls back to an arbitrary logged-in bridge user.
+        # Relay identities in priority order, as Matrix user IDs or Discord user IDs.
+        # New threads require an authenticated bot from this list. Existing threads
+        # can still receive messages without a configured bot.
         default_relays: []
 
     # Permissions for using the bridge.

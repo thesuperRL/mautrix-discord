@@ -17,9 +17,9 @@
 package config
 
 import (
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
 	up "go.mau.fi/util/configupgrade"
 	"go.mau.fi/util/random"
-	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
 	"maunium.net/go/mautrix/federation"
 )
 
@@ -128,6 +128,7 @@ func DoUpgrade(helper up.Helper) {
 	helper.Copy(up.Bool, "bridge", "provisioning", "debug_endpoints")
 
 	helper.Copy(up.Map, "bridge", "permissions")
+	helper.Copy(up.List, "bridge", "relay", "default_relays")
 	//helper.Copy(up.Bool, "bridge", "relay", "enabled")
 	//helper.Copy(up.Bool, "bridge", "relay", "admin_only")
 	//helper.Copy(up.Map, "bridge", "relay", "message_formats")
