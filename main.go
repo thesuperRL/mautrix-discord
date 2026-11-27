@@ -20,20 +20,21 @@ import (
 	_ "embed"
 	"net/http"
 
-	"github.com/gorilla/mux"
 	"sync"
 
+	"github.com/gorilla/mux"
+
+	"go.mau.fi/mautrix-discord/internal/bridge"
+	"go.mau.fi/mautrix-discord/internal/bridge/commands"
 	"go.mau.fi/util/configupgrade"
 	"go.mau.fi/util/exsync"
 	"golang.org/x/sync/semaphore"
-	"go.mau.fi/mautrix-discord/internal/bridge"
-	"go.mau.fi/mautrix-discord/internal/bridge/commands"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
 
-	"go.mau.fi/mautrix-discord/pkg/bridgeidentity"
 	"go.mau.fi/mautrix-discord/config"
 	"go.mau.fi/mautrix-discord/database"
+	"go.mau.fi/mautrix-discord/pkg/bridgeidentity"
 )
 
 // Information to find out exactly which commit the bridge was built from.
@@ -133,9 +134,7 @@ func (br *DiscordBridge) Stop() {
 	}
 }
 
-// getLoggedInUserForPortal returns the configured relay user if logged in,
-// otherwise falls back to any bridge user with an active Discord session.
-// Used when relay/webhook sends need to create a thread on Discord.
+// getLoggedInUserForPortal selects a session for legacy relay operations.
 func (br *DiscordBridge) getLoggedInUserForPortal() *User {
 	br.usersLock.Lock()
 	defer br.usersLock.Unlock()
@@ -150,7 +149,7 @@ func (br *DiscordBridge) getLoggedInUserForPortal() *User {
 		}
 	}
 	if len(br.Config.Bridge.Relay.DefaultRelays) > 0 {
-		br.Log.Warnln("No configured relay user is logged in, falling back to an arbitrary logged-in user for thread creation")
+		br.Log.Warnln("No configured relay user is logged in, falling back to another logged-in user for relay operations")
 	}
 	for _, user := range br.usersByMXID {
 		if user.Session != nil && user.IsLoggedIn() {

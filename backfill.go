@@ -258,6 +258,9 @@ func (portal *Portal) convertMessageBatch(log zerolog.Logger, source *User, mess
 	metas := make([]*discordgo.Message, 0, len(messages))
 	ctx := context.Background()
 	for _, msg := range messages {
+		if portal.shouldSkipReactionMirrorMessage(msg) {
+			continue
+		}
 		for _, mention := range msg.Mentions {
 			puppet := portal.bridge.GetPuppetByID(mention.ID)
 			puppet.UpdateInfo(nil, mention, nil)

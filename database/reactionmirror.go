@@ -25,16 +25,13 @@ func (q *ReactionMirrorQuery) GetByMessage(key PortalKey, messageID string) *Rea
 	return q.New().Scan(row)
 }
 
-func (q *ReactionMirrorQuery) IsMirrorThread(key PortalKey, threadID string) bool {
-	if threadID == "" {
-		return false
-	}
-	row := q.db.QueryRow(context.Background(), `SELECT 1 FROM reaction_mirror_state WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND summary_thread_id=$3 LIMIT 1`, key.ChannelID, key.Receiver, threadID)
+func (q *ReactionMirrorQuery) IsSummaryMessage(key PortalKey, threadID, messageID string) bool {
+	row := q.db.QueryRow(context.Background(), `
+		SELECT 1 FROM reaction_mirror_state
+		WHERE dc_chan_id=$1 AND dc_chan_receiver=$2 AND summary_thread_id=$3 AND summary_message_id=$4 LIMIT 1
+	`, key.ChannelID, key.Receiver, threadID, messageID)
 	var one int
-	if err := row.Scan(&one); err != nil {
-		return false
-	}
-	return one == 1
+	return row.Scan(&one) == nil
 }
 
 func (q *ReactionMirrorQuery) New() *ReactionMirrorState {

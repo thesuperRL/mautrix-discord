@@ -24,13 +24,13 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 	"github.com/gorilla/mux"
 	"github.com/rs/zerolog"
+	"go.mau.fi/mautrix-discord/internal/bridge"
+	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
+	"go.mau.fi/mautrix-discord/internal/bridge/status"
 	"go.mau.fi/util/exsync"
 	"go.mau.fi/util/variationselector"
 	"maunium.net/go/mautrix"
 	"maunium.net/go/mautrix/appservice"
-	"go.mau.fi/mautrix-discord/internal/bridge"
-	"go.mau.fi/mautrix-discord/internal/bridge/bridgeconfig"
-	"go.mau.fi/mautrix-discord/internal/bridge/status"
 	"maunium.net/go/mautrix/crypto/attachment"
 	"maunium.net/go/mautrix/event"
 	"maunium.net/go/mautrix/id"
@@ -74,6 +74,7 @@ type Portal struct {
 	commandsLock sync.RWMutex
 
 	forwardBackfillLock sync.Mutex
+	reactionMirrorLock  sync.Mutex
 
 	currentlyTyping     []id.UserID
 	currentlyTypingLock sync.Mutex
@@ -1143,11 +1144,10 @@ func (portal *Portal) getEvent(mxid id.EventID) (*event.Event, error) {
 }
 
 func genThreadName(evt *event.Event) string {
-	body := evt.Content.AsMessage().Body
-	if len(body) == 0 {
+	fields := strings.Fields(evt.Content.AsMessage().Body)
+	if len(fields) == 0 {
 		return "thread"
 	}
-	fields := strings.Fields(body)
 	var title string
 	for _, field := range fields {
 		if len(title)+len(field) < 40 {
@@ -1160,39 +1160,18 @@ func genThreadName(evt *event.Event) string {
 		}
 		break
 	}
-	return title
+	return strings.TrimSpace(strings.ToValidUTF8(title, ""))
 }
 
-func (portal *Portal) startThreadFromMatrix(sender *User, threadRoot id.EventID) (string, error) {
-	rootEvt, err := portal.getEvent(threadRoot)
-	if err != nil {
-		return "", fmt.Errorf("failed to get root event: %w", err)
+func (portal *Portal) startThreadFromMatrix(threadRoot id.EventID, outboundSession *discordgo.Session) (string, error) {
+	root := portal.bridge.DB.Message.GetByMXID(portal.Key, threadRoot)
+	if root == nil {
+		return "", errors.New("The thread root has no Discord message mapping")
 	}
-	threadName := genThreadName(rootEvt)
-
-	existingMsg := portal.bridge.DB.Message.GetByMXID(portal.Key, threadRoot)
-	if existingMsg == nil {
-		return "", fmt.Errorf("unknown root event")
-	} else if existingMsg.ThreadID != "" {
-		return "", fmt.Errorf("root event is already in a thread")
-	} else {
-		var ch *discordgo.Channel
-		ch, err = sender.Session.MessageThreadStartComplex(portal.Key.ChannelID, existingMsg.DiscordID, &discordgo.ThreadStart{
-			Name:                threadName,
-			AutoArchiveDuration: 24 * 60,
-			Type:                discordgo.ChannelTypeGuildPublicThread,
-			Location:            "Message",
-		}, portal.RefererOptIfUser(sender.Session, "")...)
-		if err != nil {
-			return "", fmt.Errorf("error starting thread: %v", err)
-		}
-		portal.log.Debug().
-			Str("thread_root_mxid", threadRoot.String()).
-			Str("thread_id", ch.ID).
-			Msg("Created Discord thread")
-		portal.bridge.GetThreadByID(existingMsg.DiscordID, existingMsg)
-		return ch.ID, nil
+	if root.ThreadID != "" {
+		return "", errors.New("The root message is already inside a Discord thread")
 	}
+	return portal.startDiscordThread(root, "", outboundSession)
 }
 
 func (portal *Portal) sendErrorMessage(evt *event.Event, msgType, message string, confirmed bool) id.EventID {
@@ -1231,7 +1210,8 @@ var (
 	errUnknownRelationType         = errors.New("unknown relation type")
 	errTargetNotFound              = errors.New("target event not found")
 	errUnknownEmoji                = errors.New("unknown emoji")
-	errCantStartThread             = errors.New("can't create thread without being logged into Discord")
+	errCantStartThread             = errors.New("could not create Discord thread")
+	errNoThreadBot                 = fmt.Errorf("%w: wait for a configured Discord bot to connect, or ask a bridge administrator to check bridge.relay.default_relays and the bot login", errCantStartThread)
 )
 
 func errorToStatusReason(err error) (reason event.MessageStatusReason, status event.MessageStatus, isCertain, sendNotice bool, humanMessage string, checkpointError error) {
@@ -1580,29 +1560,23 @@ func (portal *Portal) handleMatrixMessage(sender *User, evt *event.Event) {
 		}
 		return
 	} else if threadRoot := content.GetRelatesTo().GetThreadParent(); threadRoot != "" {
+		if portal.bridge.DB.Message.GetByMXID(portal.Key, evt.ID) != nil {
+			return
+		}
 		existingThread := portal.bridge.GetThreadByRootMXID(threadRoot)
 		if existingThread != nil {
+			if existingThread.ParentID != portal.Key.ChannelID {
+				go portal.sendMessageMetrics(evt, errTargetNotFound, "Ignoring thread reply")
+				return
+			}
 			threadID = existingThread.ID
 			existingThread.initialBackfillAttempted = true
 		} else {
-			// Always prefer the configured relay account for thread creation so threads
-			// appear under the bot identity, even when the sender is logged into Discord.
-			// Fall back to the sender only if no relay account is available; error out
-			// only when the sender also has no Discord session (pure webhook send).
-			threadSender := portal.bridge.getLoggedInUserForPortal()
-			if threadSender == nil {
-				if isWebhookSend {
-					go portal.sendMessageMetrics(evt, errCantStartThread, "Dropping")
-					return
-				}
-				threadSender = outboundSender
-			}
 			var err error
-			threadID, err = portal.startThreadFromMatrix(threadSender, threadRoot)
+			threadID, err = portal.startThreadFromMatrix(threadRoot, sess)
 			if err != nil {
-				portal.log.Warn().Err(err).
-					Str("thread_root_mxid", threadRoot.String()).
-					Msg("Failed to start thread from Matrix")
+				go portal.sendMessageMetrics(evt, err, "Failed to start Discord thread for")
+				return
 			}
 		}
 	}
